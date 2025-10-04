@@ -1,11 +1,11 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Link } from '@tanstack/react-router';
 import { DelayedTab } from '@types';
-import normalizeDelayedTabs from '@utils/normalizeDelayedTabs';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import useTheme from '../../../utils/useTheme';
+import useDelayedTabsStorage from '@hooks/useDelayedTabsStorage';
 
 type TabGroup = {
   id: string;
@@ -15,55 +15,12 @@ type TabGroup = {
 };
 
 function ManageTabsView(): React.ReactElement {
-  const [delayedTabs, setDelayedTabs] = useState<DelayedTab[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { delayedTabs, setDelayedTabs, loading } =
+    useDelayedTabsStorage();
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [selectMode, setSelectMode] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadDelayedTabs = async (): Promise<void> => {
-      try {
-        setLoading(true);
-        const { delayedTabs: storedTabs = [] } = await chrome.storage.local.get('delayedTabs');
-        const normalizedTabs = normalizeDelayedTabs(storedTabs);
-        const sortedTabs = [...normalizedTabs].sort(
-          (a, b) => a.wakeTime - b.wakeTime
-        );
-
-        if (isMounted) {
-          setDelayedTabs(sortedTabs);
-        }
-      } catch (error) {
-        console.error('Error loading delayed tabs:', error);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadDelayedTabs();
-
-    const handleStorageChange = (
-      changes: Record<string, chrome.storage.StorageChange>,
-      areaName: string
-    ): void => {
-      if (areaName === 'local' && changes.delayedTabs) {
-        loadDelayedTabs();
-      }
-    };
-
-    chrome.storage.onChanged.addListener(handleStorageChange);
-
-    return () => {
-      isMounted = false;
-      chrome.storage.onChanged.removeListener(handleStorageChange);
-    };
-  }, []);
 
   const tabGroups = useMemo<TabGroup[]>(() => {
     const groupMap = new Map<string, TabGroup>();
