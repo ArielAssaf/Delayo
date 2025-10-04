@@ -24,4 +24,6 @@ export interface DelayedTab {
   wakeTime: number;
   isRecurring?: boolean;
   recurrencePattern?: RecurrencePattern;
+  windowSessionId?: string;
+  windowIndex?: number;
 }

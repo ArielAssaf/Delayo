@@ -110,6 +110,7 @@
     "wakeUp": "Despertar",
     "remove": "Eliminar",
     "untitledTab": "Pestaña sin título",
+    "windowGroup": "Ventana • {{count}} pestañas",
     "actions": "Acciones"
   },
   "donation": {

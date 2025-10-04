@@ -86,6 +86,9 @@ function CustomDelayView(): React.ReactElement {
 
     const wakeTime = new Date(customDate).getTime();
 
+    const windowSessionId =
+      selectedMode === 'window' ? generateUniqueTabId() : undefined;
+
     if (
       typeof chrome !== 'undefined' &&
       chrome.storage &&
@@ -107,10 +110,12 @@ function CustomDelayView(): React.ReactElement {
             favicon: tab.favIconUrl,
             createdAt: Date.now(),
             wakeTime,
+            windowSessionId,
+            windowIndex: typeof tab.index === 'number' ? tab.index : undefined,
           };
 
           delayedTabs.push(tabInfo);
-          
+
           if (chrome.alarms) {
             await chrome.alarms.create(`delayed-tab-${tabInfo.id}`, {
               when: wakeTime,

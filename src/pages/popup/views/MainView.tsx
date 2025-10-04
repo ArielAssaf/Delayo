@@ -394,6 +394,9 @@ function MainView(): React.ReactElement {
     const tabsToDelay = getTabsToDelay();
     if (tabsToDelay.length === 0) return;
 
+    const windowSessionId =
+      selectedMode === 'window' ? generateUniqueTabId() : undefined;
+
     let wakeTime: number;
     if (option.calculateTime) {
       wakeTime = option.calculateTime();
@@ -421,10 +424,12 @@ function MainView(): React.ReactElement {
           favicon: tab.favIconUrl,
           createdAt: Date.now(),
           wakeTime,
+          windowSessionId,
+          windowIndex: typeof tab.index === 'number' ? tab.index : undefined,
         };
 
         delayedTabs.push(tabInfo);
-        
+
         await chrome.alarms.create(`delayed-tab-${tabInfo.id}`, {
           when: wakeTime,
         });

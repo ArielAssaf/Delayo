@@ -110,6 +110,7 @@
     "wakeUp": "Acordar",
     "remove": "Remover",
     "untitledTab": "Aba sem título",
+    "windowGroup": "Janela • {{count}} abas",
     "actions": "Ações"
   },
   "donation": {

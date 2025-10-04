@@ -13,6 +13,7 @@ import {
   faGear,
   faHourglassEmpty,
   faHourglassHalf,
+  faGlobe,
   faLeaf,
   faListUl,
   faMoon,
@@ -26,6 +27,7 @@ import {
   faUmbrellaBeach,
   faWater,
   faWind,
+  faWindowRestore,
 } from '@fortawesome/free-solid-svg-icons';
 
 library.add(
@@ -42,6 +44,7 @@ library.add(
   faGear,
   faHourglassEmpty,
   faHourglassHalf,
+  faGlobe,
   faLeaf,
   faListUl,
   faMoon,
@@ -54,5 +57,6 @@ library.add(
   faTree,
   faUmbrellaBeach,
   faWater,
-  faWind
+  faWind,
+  faWindowRestore
 );
