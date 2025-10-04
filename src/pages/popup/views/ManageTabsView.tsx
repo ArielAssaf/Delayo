@@ -35,16 +35,50 @@ function ManageTabsView(): React.ReactElement {
     loadDelayedTabs();
   }, []);
 
+  const getWindowGroupTabIds = (tab: DelayedTab): string[] => {
+    if (tab.windowSessionId) {
+      return delayedTabs
+        .filter(
+          (item) =>
+            item.windowSessionId === tab.windowSessionId &&
+            item.wakeTime === tab.wakeTime
+        )
+        .map((item) => item.id);
+    }
+
+    return [tab.id];
+  };
+
+  const expandTabIdsForWindowGroups = (tabIds: string[]): string[] => {
+    const expandedIds = new Set<string>();
+
+    tabIds.forEach((id) => {
+      const tab = delayedTabs.find((item) => item.id === id);
+      if (!tab) return;
+
+      getWindowGroupTabIds(tab).forEach((groupId) => expandedIds.add(groupId));
+    });
+
+    return Array.from(expandedIds);
+  };
+
   const wakeTabNow = async (tab: DelayedTab): Promise<void> => {
     try {
-      if (tab.url) {
-        await chrome.tabs.create({ url: tab.url });
-        const updatedTabs = delayedTabs.filter((item) => item.id !== tab.id);
-        await chrome.storage.local.set({ delayedTabs: updatedTabs });
-        await chrome.alarms.clear(`delayed-tab-${tab.id}`);
-        setDelayedTabs(updatedTabs);
-        setSelectedTabs(prev => prev.filter(id => id !== tab.id));
-      }
+      const groupTabIds = getWindowGroupTabIds(tab);
+
+      await chrome.runtime.sendMessage({
+        action: 'wake-tabs',
+        tabIds: groupTabIds,
+      });
+
+      const updatedTabs = delayedTabs.filter(
+        (item) => !groupTabIds.includes(item.id)
+      );
+
+      setDelayedTabs(updatedTabs);
+      setSelectedTabs((prev) =>
+        prev.filter((id) => !groupTabIds.includes(id))
+      );
     } catch (error) {
       console.error('Error waking tab:', error);
     }
@@ -89,13 +123,19 @@ function ManageTabsView(): React.ReactElement {
 
   const wakeSelectedTabs = async (): Promise<void> => {
     try {
+      const expandedTabIds = expandTabIdsForWindowGroups(selectedTabs);
+
+      if (expandedTabIds.length === 0) {
+        return;
+      }
+
       await chrome.runtime.sendMessage({
         action: 'wake-tabs',
-        tabIds: selectedTabs,
+        tabIds: expandedTabIds,
       });
 
       const updatedTabs = delayedTabs.filter(
-        tab => !selectedTabs.includes(tab.id)
+        (tab) => !expandedTabIds.includes(tab.id)
       );
 
       setDelayedTabs(updatedTabs);

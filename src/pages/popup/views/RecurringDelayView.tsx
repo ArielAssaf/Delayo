@@ -175,6 +175,9 @@ function RecurringDelayView(): React.ReactElement {
       endDate: endDate ? new Date(endDate).getTime() : undefined,
     };
 
+    const windowSessionId =
+      selectedMode === 'window' ? generateUniqueTabId() : undefined;
+
     if (
       typeof chrome !== 'undefined' &&
       chrome.storage &&
@@ -197,10 +200,13 @@ function RecurringDelayView(): React.ReactElement {
             createdAt: Date.now(),
             wakeTime: firstWakeTime.getTime(),
             recurrencePattern,
+            isRecurring: true,
+            windowSessionId,
+            windowIndex: typeof tab.index === 'number' ? tab.index : undefined,
           };
-          
+
           delayedTabs.push(tabInfo);
-          
+
           if (chrome.alarms) {
             await chrome.alarms.create(`delayed-tab-${tabInfo.id}`, {
               when: firstWakeTime.getTime(),
