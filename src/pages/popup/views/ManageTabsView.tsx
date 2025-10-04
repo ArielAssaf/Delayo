@@ -23,6 +23,8 @@ function ManageTabsView(): React.ReactElement {
   const { t } = useTranslation();
 
   useEffect(() => {
+    let isMounted = true;
+
     const loadDelayedTabs = async (): Promise<void> => {
       try {
         setLoading(true);
@@ -31,15 +33,36 @@ function ManageTabsView(): React.ReactElement {
         const sortedTabs = [...normalizedTabs].sort(
           (a, b) => a.wakeTime - b.wakeTime
         );
-        setDelayedTabs(sortedTabs);
+
+        if (isMounted) {
+          setDelayedTabs(sortedTabs);
+        }
       } catch (error) {
         console.error('Error loading delayed tabs:', error);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     loadDelayedTabs();
+
+    const handleStorageChange = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string
+    ): void => {
+      if (areaName === 'local' && changes.delayedTabs) {
+        loadDelayedTabs();
+      }
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+
+    return () => {
+      isMounted = false;
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
   }, []);
 
   const tabGroups = useMemo<TabGroup[]>(() => {
