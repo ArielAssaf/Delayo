@@ -110,7 +110,20 @@
     "wakeUp": "Acordar",
     "remove": "Remover",
     "untitledTab": "Aba sem título",
-    "actions": "Ações"
+    "actions": "Ações",
+    "window": "Janela",
+    "windowWithIndex": "Janela {{index}}",
+    "tabCount": "{{count}} aba",
+    "tabCount_plural": "{{count}} abas",
+    "wakeWindow": "Acordar janela",
+    "removeWindow": "Remover janela",
+    "wakeTab": "Acordar aba",
+    "editSchedule": "Editar horário de despertar",
+    "newWakeTimeLabel": "Escolha um novo horário de despertar",
+    "saveChanges": "Salvar alterações",
+    "saving": "Salvando...",
+    "invalidWakeTime": "Escolha uma data e horário no futuro.",
+    "updateError": "Não foi possível atualizar o horário. Tente novamente."
   },
   "donation": {
     "title": "Apoie o Projeto",

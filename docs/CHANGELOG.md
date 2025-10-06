@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+2025-10-05 - Popup manage view groups delayed tabs, adds one-click window restore, per-tab wake, and schedule editing
+
 ## 1.1.1 (2025-06-13)
 
 ### Bug Fixes
@@ -37,3 +39,4 @@ All notable changes to this project will be documented in this file. See [standa
 ## Histórico anterior
 
 As versões anteriores à `1.0.0` fazem parte do projeto original [Snoozr](https://github.com/hardchor/snoozr).
+

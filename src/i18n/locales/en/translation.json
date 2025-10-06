@@ -110,7 +110,20 @@
     "wakeUp": "Wake Up",
     "remove": "Remove",
     "untitledTab": "Untitled tab",
-    "actions": "Actions"
+    "actions": "Actions",
+    "window": "Window",
+    "windowWithIndex": "Window {{index}}",
+    "tabCount": "{{count}} tab",
+    "tabCount_plural": "{{count}} tabs",
+    "wakeWindow": "Wake Window",
+    "removeWindow": "Remove Window",
+    "wakeTab": "Wake Tab",
+    "editSchedule": "Edit wake time",
+    "newWakeTimeLabel": "Choose a new wake time",
+    "saveChanges": "Save changes",
+    "saving": "Saving...",
+    "invalidWakeTime": "Choose a future date and time.",
+    "updateError": "Unable to update wake time. Try again."
   },
   "donation": {
     "title": "Support the Project",

@@ -110,7 +110,20 @@
     "wakeUp": "Despertar",
     "remove": "Eliminar",
     "untitledTab": "Pestaña sin título",
-    "actions": "Acciones"
+    "actions": "Acciones",
+    "window": "Ventana",
+    "windowWithIndex": "Ventana {{index}}",
+    "tabCount": "{{count}} pestaña",
+    "tabCount_plural": "{{count}} pestañas",
+    "wakeWindow": "Despertar ventana",
+    "removeWindow": "Eliminar ventana",
+    "wakeTab": "Despertar pestaña",
+    "editSchedule": "Editar hora de despertado",
+    "newWakeTimeLabel": "Elige una nueva hora de despertado",
+    "saveChanges": "Guardar cambios",
+    "saving": "Guardando...",
+    "invalidWakeTime": "Elige una fecha y hora futuras.",
+    "updateError": "No se pudo actualizar la hora. Inténtalo de nuevo."
   },
   "donation": {
     "title": "Apoya el Proyecto",
