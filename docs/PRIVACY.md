@@ -4,7 +4,7 @@ Delayo is a free and open-source Chrome extension designed to help users postpon
 
 ## 🔐 Data Collection
 
-Delayo does **not** collect, store, share, or transmit any user data, browsing activity, or personal information.
+Delayo does **not** collect, share, or transmit any user data, browsing activity, or personal information to the developer or any third party. Delayed-tab records are stored locally in Chrome so the extension can restore them later.
 
 - No telemetry
 - No analytics
@@ -23,7 +23,7 @@ These are solely used to support the core features of the extension and are neve
 ## 🔓 Open Source
 
 The source code is available and open for review, improvement, or contributions at:
-[https://github.com/allud1t/delayo](https://github.com/allud1t/delayo)
+[https://github.com/ArielAssaf/Delayo](https://github.com/ArielAssaf/Delayo)
 
 Feel free to inspect the code to verify how the extension works internally.
 

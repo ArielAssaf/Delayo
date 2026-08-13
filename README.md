@@ -9,6 +9,30 @@ Ideal for those who want focus, organization and a tidier tab bar.
 
 ---
 
+## Releases and trust
+
+- [Install Delayo from the Chrome Web Store](https://chromewebstore.google.com/detail/delayo/egbfkigkgocjmahcdmigccelneabbajh)
+- The currently published store version is `1.2.0`; the next source release is `1.2.1`.
+- Official builds are created by GitHub Actions from matching version tags such as `v1.2.1`.
+- Each tagged release includes the exact ZIP uploaded to the Chrome Web Store and a SHA-256 checksum.
+- Builds from other sources are unofficial; inspect the tag and checksum before installing one.
+
+The `1.2.1` source is the next release after the current `1.2.0` store upload. Until `v1.2.1` is released, the repository should not be treated as a byte-for-byte copy of the installed store package.
+
+### Permissions
+
+Delayo requests only `storage`, `tabs`, `alarms`, `notifications`, and `contextMenus`:
+
+- `storage` keeps delayed-tab records locally in Chrome.
+- `tabs` reads the tab information needed to save and restore a delayed tab.
+- `alarms` schedules wake-ups.
+- `notifications` alerts you when a tab is ready.
+- `contextMenus` adds the delay action to Chrome's tab context menu.
+
+See the [privacy policy](docs/PRIVACY.md) and [API notes](docs/apis.md) for implementation details.
+
+---
+
 ## 🚀 Features
 
 - 💤 **Delay Tabs**: Temporarily snooze tabs so you can focus on what matters now
@@ -73,8 +97,8 @@ To run locally:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/allud1t/delayo.git
-cd delayo
+git clone https://github.com/ArielAssaf/Delayo.git
+cd Delayo
 
 # 2. Install dependencies
 pnpm install
@@ -161,8 +185,8 @@ Para rodar localmente:
 
 ```bash
 # 1. Clone o repositório
-git clone https://github.com/allud1t/delayo.git
-cd delayo
+git clone https://github.com/ArielAssaf/Delayo.git
+cd Delayo
 
 # 2. Instale dependências
 pnpm install

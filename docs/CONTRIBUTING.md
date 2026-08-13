@@ -8,7 +8,7 @@ This project is open source and welcomes constructive contributions of all kinds
 ### 🐛 Reporting bugs
 
 1. Check if the issue has already been reported
-2. Open a new [issue](https://github.com/allud1t/delayo/issues) with:
+2. Open a new [issue](https://github.com/ArielAssaf/Delayo/issues) with:
     - Clear description
     - Steps to reproduce
     - Expected vs. observed behavior
@@ -63,7 +63,7 @@ Este projeto é open source e acolhe contribuições construtivas de todos os ti
 ### 🐛 Relatando bugs
 
 1. Verifique se o problema já foi reportado
-2. Abra uma nova [issue](https://github.com/allud1t/delayo/issues) com:
+2. Abra uma nova [issue](https://github.com/ArielAssaf/Delayo/issues) com:
     - Descrição clara
     - Etapas para reproduzir
     - Comportamento esperado vs. comportamento observado

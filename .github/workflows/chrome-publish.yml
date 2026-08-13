@@ -4,35 +4,60 @@ on:
   push:
     tags:
       - 'v*.*.*'
-    branches:
-      - release
 
 jobs:
   release:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Setup Node + PNPM
-        uses: pnpm/action-setup@v2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
-          version: 8
+          version: 10.6.5
 
-      - name: Install dependencies and build
-        run: |
-          corepack enable
-          pnpm install
-          pnpm run build
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release version
+        run: pnpm verify:version -- "${GITHUB_REF_NAME}"
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build extension
+        run: pnpm build
 
       - name: Zip extension
         run: cd dist && zip -r ../delayo.zip .
 
+      - name: Create checksum
+        run: sha256sum delayo.zip > delayo.zip.sha256
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" delayo.zip delayo.zip.sha256 \
+            --verify-tag \
+            --title "Delayo ${GITHUB_REF_NAME}" \
+            --generate-notes
+
       - name: Upload to Chrome Web Store
-        uses: ExtensionNinja/extension-publish@main
+        uses: ExtensionNinja/extension-publish@e48732b5b9b5db4e1dac30e5ff39a343b8f5b5db # main, resolved 2026-08-13
         with:
-          action: upload
+          action: uploadPublish
           extensionID: ${{ secrets.CWS_EXTENSION_ID }}
           clientID: ${{ secrets.CWS_CLIENT_ID }}
           clientSecret: ${{ secrets.CWS_CLIENT_SECRET }}

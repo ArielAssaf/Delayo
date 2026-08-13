@@ -310,7 +310,7 @@ function Options(): React.ReactElement {
             <DonationButton isCompact={false} />
           </div>
           <a
-            href='https://github.com/allud1t/delayo'
+            href='https://github.com/ArielAssaf/Delayo'
             target='_blank'
             rel='noopener noreferrer'
             className='link link-primary flex items-center gap-2'
@@ -330,7 +330,7 @@ function Options(): React.ReactElement {
           </a>
           <div className='flex gap-4'>
             <a
-              href='https://github.com/allud1t/delayo/discussions/new?category=ideas'
+              href='https://github.com/ArielAssaf/Delayo/discussions/new?category=ideas'
               target='_blank'
               rel='noopener noreferrer'
               className='link link-accent'
@@ -338,7 +338,7 @@ function Options(): React.ReactElement {
               Propose New Features
             </a>
             <a
-              href='https://github.com/allud1t/delayo/issues/new'
+              href='https://github.com/ArielAssaf/Delayo/issues/new'
               target='_blank'
               rel='noopener noreferrer'
               className='link link-accent'
