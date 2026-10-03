@@ -4,7 +4,6 @@ import useTheme from '@utils/useTheme';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import DonationButton from '../../components/DonationButton';
-import LanguageSelector from '../../components/LanguageSelector';
 import '../../i18n';
 
 import DelaySettingsComponent from './DelaySettings';
@@ -296,13 +295,6 @@ function Options(): React.ReactElement {
       </div>
 
       {activeTab === 'tabs' ? content : <div className="settings-width-850"><DelaySettingsComponent isPopup={false} /></div>}
-
-      <div className="form-control mt-4">
-        <label className="label">
-          <span className="label-text font-medium">{t('settings.language')}</span>
-        </label>
-        <LanguageSelector />
-      </div>
 
       <div className='mt-6 text-center text-sm'>
         <div className='flex flex-col items-center justify-center gap-2'>

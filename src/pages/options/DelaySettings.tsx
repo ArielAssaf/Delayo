@@ -14,31 +14,19 @@ const getSelectClasses = (isPopup: boolean): string => {
 
 interface DelaySettings {
   laterToday: number; // hours
-  tonightTime: string; // format HH:MM
   tomorrowTime: string; // format HH:MM
   weekendDay: 'saturday' | 'sunday';
   weekendTime: string; // format HH:MM
-  nextWeekSameDay: boolean; // if true, same day of week; if false, specific day of week
-  nextWeekDay: number; // 0-6 (0 = Sunday, 1 = Monday, etc.)
-  nextWeekTime: string; // format HH:MM
   nextMonthSameDay: boolean; // if true, same day of month; if false, same day of week
-  somedayMinMonths: number; // minimum months for "Someday"
-  somedayMaxMonths: number; // maximum months for "Someday"
 }
 
 // Default values for settings
 const defaultSettings: DelaySettings = {
   laterToday: 3,
-  tonightTime: '18:00',
   tomorrowTime: '09:00',
   weekendDay: 'saturday',
   weekendTime: '09:00',
-  nextWeekSameDay: false,
-  nextWeekDay: 1, // Monday
-  nextWeekTime: '09:00',
   nextMonthSameDay: true,
-  somedayMinMonths: 3,
-  somedayMaxMonths: 12,
 };
 
 interface DelaySettingsComponentProps {
@@ -128,22 +116,6 @@ function DelaySettingsComponent({ isPopup = false }: DelaySettingsComponentProps
             </div>
           </div>
 
-          {/* Tonight */}
-          <div className='form-control'>
-            <label className='label'>
-              <span className='label-text font-medium'>{t('settings.tonight')}</span>
-            </label>
-            <div className='relative'>
-              <input
-                type='time'
-                className={`${getInputClasses(isPopup)} w-full max-w-72`}
-                value={settings.tonightTime}
-                onChange={(e) => updateSetting('tonightTime', e.target.value)}
-                style={{ appearance: 'none' }}
-              />
-            </div>
-          </div>
-
           {/* Tomorrow */}
           <div className='form-control'>
             <label className='label'>
@@ -191,70 +163,6 @@ function DelaySettingsComponent({ isPopup = false }: DelaySettingsComponentProps
             </div>
           </div>
 
-          {/* Next Week */}
-          <div className='form-control'>
-            <label className='label'>
-              <span className='label-text font-medium'>{t('settings.nextWeek')}</span>
-            </label>
-            <div className='flex items-center mb-2'>
-              <div className='form-control'>
-                <label className='label cursor-pointer'>
-                  <input
-                    type='radio'
-                    name='nextWeekOption'
-                    className={getRadioClasses(isPopup)}
-                    checked={settings.nextWeekSameDay}
-                    onChange={() => updateSetting('nextWeekSameDay', true)}
-                  />
-                  <span className='label-text ml-2'>{t('settings.sameDayOfWeek', 'Mesmo dia da semana')}</span>
-                </label>
-              </div>
-              <div className='form-control ml-4'>
-                <label className='label cursor-pointer'>
-                  <input
-                    type='radio'
-                    name='nextWeekOption'
-                    className={getRadioClasses(isPopup)}
-                    checked={!settings.nextWeekSameDay}
-                    onChange={() => updateSetting('nextWeekSameDay', false)}
-                  />
-                  <span className='label-text ml-2'>{t('settings.specificDay', 'Dia específico')}</span>
-                </label>
-              </div>
-            </div>
-            
-            {!settings.nextWeekSameDay && (
-              <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
-                <select
-                  className={`${getSelectClasses(isPopup)} w-full max-w-72`}
-                  value={settings.nextWeekDay}
-                  onChange={(e) =>
-                    updateSetting('nextWeekDay', parseInt(e.target.value, 10))
-                  }
-                >
-                  <option value='0'>{t('popup.weekdays.sunday')}</option>
-                  <option value='1'>{t('popup.weekdays.monday')}</option>
-                  <option value='2'>{t('popup.weekdays.tuesday')}</option>
-                  <option value='3'>{t('popup.weekdays.wednesday')}</option>
-                  <option value='4'>{t('popup.weekdays.thursday')}</option>
-                  <option value='5'>{t('popup.weekdays.friday')}</option>
-                  <option value='6'>{t('popup.weekdays.saturday')}</option>
-                </select>
-                <div className='relative'>
-                  <input
-                    type='time'
-                    className={`${getInputClasses(isPopup)} w-full max-w-72`}
-                    value={settings.nextWeekTime}
-                    onChange={(e) => updateSetting('nextWeekTime', e.target.value)}
-                    style={{ appearance: 'none' }}
-                  />
-                </div>
-              </div>
-            )}
-            
-            {/* Removed the time input for 'same day of the week' */}
-          </div>
-
           {/* Next Month */}
           <div className='form-control'>
             <label className='label'>
@@ -289,51 +197,6 @@ function DelaySettingsComponent({ isPopup = false }: DelaySettingsComponentProps
             {}
           </div>
 
-          {/* Someday (Random) */}
-          <div className='form-control'>
-            <label className='label'>
-              <span className='label-text font-medium'>{t('settings.someday')}</span>
-            </label>
-            <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
-              <div>
-                <label className='label'>
-                  <span className='label-text'>{t('settings.minMonths')}</span>
-                </label>
-                <input
-                  type='number'
-                  className={`${getInputClasses(isPopup)} w-20`}
-                  min='1'
-                  max='12'
-                  value={settings.somedayMinMonths}
-                  onChange={(e) =>
-                    updateSetting(
-                      'somedayMinMonths',
-                      parseInt(e.target.value, 10) || 1
-                    )
-                  }
-                />
-              </div>
-              <div>
-                <label className='label'>
-                  <span className='label-text'>{t('settings.maxMonths')}</span>
-                </label>
-                <input
-                  type='number'
-                  className={`${getInputClasses(isPopup)} w-20`}
-                  min={settings.somedayMinMonths + 1}
-                  max='36'
-                  value={settings.somedayMaxMonths}
-                  onChange={(e) =>
-                    updateSetting(
-                      'somedayMaxMonths',
-                      parseInt(e.target.value, 10) ||
-                        settings.somedayMinMonths + 1
-                    )
-                  }
-                />
-              </div>
-            </div>
-          </div>
         </div>
 
         <div className='card-actions mt-6 justify-end'>

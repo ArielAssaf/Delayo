@@ -28,12 +28,11 @@
     },
     "delayOptions": {
       "laterToday": "Later today (in {{hours}} hours)",
-      "tonight": "Tonight (at {{time}})",
       "tomorrow": "Tomorrow (at {{time}})",
       "weekend": "This weekend ({{day}}, {{time}})",
       "nextWeek": "Next week ({{day}}, {{time}})",
+      "oneWeek": "In one week",
       "nextMonth": "Next month",
-      "someday": "Someday (random)",
       "custom": "Custom date & time",
       "recurring": "Recurring"
     },
@@ -70,7 +69,6 @@
   "settings": {
     "title": "Settings",
     "general": "General",
-    "language": "Language",
     "theme": "Theme",
     "reset": "Reset",
     "notifications": "Notifications",
@@ -78,18 +76,11 @@
     "defaultDelayOptions": "Default Delay Options",
     "laterToday": "Later Today",
     "hours": "hours",
-    "tonight": "Tonight",
     "tomorrow": "Tomorrow",
     "weekend": "This Weekend",
-    "day": "Day",
-    "nextWeek": "Next Week",
     "nextMonth": "Next Month",
     "sameDayOfMonth": "Same day of month",
-    "sameDayOfWeek": "Same day of week",
-    "specificDay": "Specific day",
-    "someday": "Someday (random)",
-    "minMonths": "Minimum months",
-    "maxMonths": "Maximum months"
+    "sameDayOfWeek": "Same day of week"
   },
   "manageTabs": {
     "title": "Management",

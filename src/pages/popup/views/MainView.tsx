@@ -11,16 +11,10 @@ import generateUniqueTabId from '@utils/generateUniqueTabId';
 
 interface DelaySettings {
   laterToday: number; // hours
-  tonightTime: string; // format HH:MM
   tomorrowTime: string; // format HH:MM
   weekendDay: 'saturday' | 'sunday';
   weekendTime: string; // format HH:MM
-  nextWeekSameDay: boolean; // if true, same week day; if false, specific day
-  nextWeekDay: number; // 0-6 (0 = Sunday, 1 = Monday, ...)
-  nextWeekTime: string; // format HH:MM
   nextMonthSameDay: boolean; // if true, same month day; if false, same week day near the same day
-  somedayMinMonths: number; // min of months for "Someday"
-  somedayMaxMonths: number; // max of months for "Someday"
 }
 
 function MainView(): React.ReactElement {
@@ -32,16 +26,10 @@ function MainView(): React.ReactElement {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<DelaySettings>({
     laterToday: 3, // 3 hours later
-    tonightTime: '18:00',
     tomorrowTime: '09:00',
     weekendDay: 'saturday',
     weekendTime: '09:00',
-    nextWeekDay: 1, // Monday
-    nextWeekTime: '09:00',
     nextMonthSameDay: true,
-    nextWeekSameDay: true,
-    somedayMinMonths: 3, // default min of 3 months for "Someday"
-    somedayMaxMonths: 12, // default - max of 12 months for "Someday"
   });
   const { theme, toggleTheme } = useTheme();
 
@@ -131,20 +119,6 @@ function MainView(): React.ReactElement {
       hours: settings.laterToday,
     },
     {
-      id: 'tonight',
-      label: t('popup.delayOptions.tonight', { time: settings.tonightTime }),
-      custom: true,
-      calculateTime: () => {
-        const { hours, minutes } = getTimeFromString(settings.tonightTime);
-        const today = new Date();
-        today.setHours(hours, minutes, 0, 0);
-        if (today.getTime() < Date.now()) {
-          return Date.now() + 60 * 60 * 1000;
-        }
-        return today.getTime();
-      },
-    },
-    {
       id: 'tomorrow',
       label: t('popup.delayOptions.tomorrow', { time: settings.tomorrowTime }),
       custom: true,
@@ -186,42 +160,26 @@ function MainView(): React.ReactElement {
     },
     {
       id: 'next_week',
-      label: (() => {
-        if (settings.nextWeekSameDay) {
-          const today = new Date();
-          const dayName = t(`popup.weekdays.${['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][today.getDay()]}`);
-          return t('popup.delayOptions.nextWeek', { day: dayName, time: '' }).replace(', ', '');
-        } else {
-          const dayName = t(`popup.weekdays.${['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][settings.nextWeekDay]}`);
-          return t('popup.delayOptions.nextWeek', { day: dayName, time: '' }).replace(', ', '');
-        }
-      })(),
+      label: t('popup.delayOptions.nextWeek', {
+        day: t('popup.weekdays.sunday'),
+        time: '',
+      }).replace(', ', ''),
       custom: true,
       calculateTime: () => {
         const today = new Date();
-        const hours = today.getHours();
-        const minutes = today.getMinutes();
-        let targetDay;
-        
-        if (settings.nextWeekSameDay) {
-          targetDay = today.getDay();
-        } else {
-          targetDay = settings.nextWeekDay;
-        }
-        
-        const currentDay = today.getDay();
-        let daysUntilTarget;
-        if (currentDay === targetDay) {
-          daysUntilTarget = 7;
-        } else if (currentDay < targetDay) {
-          daysUntilTarget = targetDay - currentDay + 7;
-        } else {
-          daysUntilTarget = 7 - (currentDay - targetDay) + 7;
-        }
-
+        const daysUntilSunday = (7 - today.getDay()) % 7 || 7;
+        const targetDate = new Date(today);
+        targetDate.setDate(today.getDate() + daysUntilSunday);
+        return targetDate.getTime();
+      },
+    },
+    {
+      id: 'one_week',
+      label: t('popup.delayOptions.oneWeek'),
+      custom: true,
+      calculateTime: () => {
         const targetDate = new Date();
-        targetDate.setDate(today.getDate() + daysUntilTarget);
-        targetDate.setHours(hours, minutes, 0, 0);
+        targetDate.setDate(targetDate.getDate() + 7);
         return targetDate.getTime();
       },
     },
@@ -350,25 +308,6 @@ function MainView(): React.ReactElement {
           }
         }
         targetDate.setHours(today.getHours(), today.getMinutes(), 0, 0);
-        return targetDate.getTime();
-      },
-    },
-    {
-      id: 'someday',
-      label: t('popup.delayOptions.someday'),
-      custom: true,
-      calculateTime: () => {
-        const today = new Date();
-        const minMonths = settings.somedayMinMonths;
-        const maxMonths = settings.somedayMaxMonths;
-        const randomMonths = Math.floor(Math.random() * (maxMonths - minMonths + 1)) + minMonths;
-
-        const randomDays = Math.floor(Math.random() * 30);
-
-        const targetDate = new Date();
-        targetDate.setMonth(today.getMonth() + randomMonths);
-        targetDate.setDate(today.getDate() + randomDays);
-
         return targetDate.getTime();
       },
     },
@@ -578,9 +517,7 @@ function MainView(): React.ReactElement {
                               ? 'briefcase'
                               : option.id === 'next_month'
                                 ? 'envelope'
-                                : option.id === 'someday'
-                                  ? 'umbrella-beach'
-                                  : 'clock'
+                                : 'clock'
                   }
                   className='mb-3 h-5 w-5 transform text-neutral-400 transition-all duration-300 ease-in-out group-hover:scale-110 group-hover:text-delayo-orange'
                 />
