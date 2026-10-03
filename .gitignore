@@ -10,9 +10,11 @@ dist-ssr/
 build/
 out/
 *.local
-release/
-
-# 🧪 Logs
+/release/
+artifacts/
+delayo-*-chrome-web-store.zip
+*.timestamp*.mjs
+vite.config.ts.timestamp*
 logs/
 *.log
 npm-debug.log*

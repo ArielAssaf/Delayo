@@ -1,40 +1,210 @@
-name: Publish to Chrome Web Store
+name: Chrome Web Store Release
 
 on:
   push:
     tags:
       - 'v*.*.*'
-    branches:
-      - release
+  workflow_dispatch:
+    inputs:
+      release_mode:
+        description: 'validate_only skips the store, upload_only uploads only, upload_and_publish submits for review'
+        required: true
+        default: validate_only
+        type: choice
+        options:
+          - validate_only
+          - upload_only
+          - upload_and_publish
+      auth_mode:
+        description: 'auto prefers WIF; choose oauth to test the owner refresh token explicitly'
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - oauth
+          - wif
+          - service_account_key
+
+concurrency:
+  group: chrome-web-store-release
+  cancel-in-progress: false
 
 jobs:
   release:
+    name: Validate and release Delayo
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Setup Node + PNPM
-        uses: pnpm/action-setup@v2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          version: 8
+          node-version: 22
+          cache: pnpm
 
-      - name: Install dependencies and build
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve release mode
+        id: release-mode
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RELEASE_MODE: ${{ inputs.release_mode }}
         run: |
-          corepack enable
-          pnpm install
-          pnpm run build
+          RELEASE_MODE="${INPUT_RELEASE_MODE:-upload_and_publish}"
+          if [ "$EVENT_NAME" = "push" ]; then
+            RELEASE_MODE="upload_and_publish"
+          fi
 
-      - name: Zip extension
-        run: cd dist && zip -r ../delayo.zip .
+          echo "value=$RELEASE_MODE" >> "$GITHUB_OUTPUT"
+          echo "Resolved release mode: $RELEASE_MODE"
 
-      - name: Upload to Chrome Web Store
-        uses: ExtensionNinja/extension-publish@main
+      - name: Validate release version
+        id: release-version
+        run: |
+          node ./scripts/release/validate-release.mjs \
+            --event-name "${{ github.event_name }}" \
+            --ref-name "${{ github.ref_name }}" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package extension
+        id: package-extension
+        shell: pwsh
+        run: |
+          & ./scripts/zip.ps1 `
+            -SourceDir "dist" `
+            -OutputDir "artifacts" `
+            -BaseName "delayo-chrome-web-store" `
+            -Version "${{ steps.release-version.outputs.version }}" `
+            -GithubOutput $env:GITHUB_OUTPUT
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          action: upload
-          extensionID: ${{ secrets.CWS_EXTENSION_ID }}
-          clientID: ${{ secrets.CWS_CLIENT_ID }}
-          clientSecret: ${{ secrets.CWS_CLIENT_SECRET }}
-          clientRefreshToken: ${{ secrets.CWS_REFRESH_TOKEN }}
-          extensionFile: ./delayo.zip
+          name: ${{ steps.package-extension.outputs.archive_name }}
+          path: ${{ steps.package-extension.outputs.archive_path }}
+          if-no-files-found: error
+
+      - name: Resolve Chrome Web Store authentication
+        if: ${{ steps.release-mode.outputs.value != 'validate_only' }}
+        id: cws-auth-mode
+        shell: bash
+        env:
+          WIF_PROVIDER: ${{ secrets.CWS_WORKLOAD_IDENTITY_PROVIDER }}
+          SERVICE_ACCOUNT_EMAIL: ${{ secrets.CWS_SERVICE_ACCOUNT_EMAIL }}
+          SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_KEY_JSON }}
+          OAUTH_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          OAUTH_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          OAUTH_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          REQUESTED_AUTH_MODE: ${{ inputs.auth_mode }}
+        run: |
+          REQUESTED_AUTH_MODE="${REQUESTED_AUTH_MODE:-auto}"
+
+          has_wif=false
+          has_service_account_key=false
+          has_oauth=false
+
+          if [ -n "$WIF_PROVIDER" ] && [ -n "$SERVICE_ACCOUNT_EMAIL" ]; then
+            has_wif=true
+          fi
+          if [ -n "$SERVICE_ACCOUNT_KEY_JSON" ] && [ -n "$SERVICE_ACCOUNT_EMAIL" ]; then
+            has_service_account_key=true
+          fi
+          if [ -n "$OAUTH_CLIENT_ID" ] && [ -n "$OAUTH_CLIENT_SECRET" ] && [ -n "$OAUTH_REFRESH_TOKEN" ]; then
+            has_oauth=true
+          fi
+
+          selected_mode="$REQUESTED_AUTH_MODE"
+          if [ "$REQUESTED_AUTH_MODE" = "auto" ]; then
+            if [ "$has_wif" = true ]; then
+              selected_mode="wif"
+            elif [ "$has_service_account_key" = true ]; then
+              selected_mode="service_account_key"
+            elif [ "$has_oauth" = true ]; then
+              selected_mode="oauth"
+            fi
+          fi
+
+          case "$selected_mode" in
+            wif)
+              if [ "$has_wif" != true ]; then
+                echo "::error::WIF authentication was selected, but CWS_WORKLOAD_IDENTITY_PROVIDER and CWS_SERVICE_ACCOUNT_EMAIL are not both configured."
+                exit 1
+              fi
+              echo "Using Workload Identity Federation authentication."
+              ;;
+            service_account_key)
+              if [ "$has_service_account_key" != true ]; then
+                echo "::error::Service account key authentication was selected, but CWS_SERVICE_ACCOUNT_KEY_JSON and CWS_SERVICE_ACCOUNT_EMAIL are not both configured."
+                exit 1
+              fi
+              echo "Using service account key authentication."
+              ;;
+            oauth)
+              if [ "$has_oauth" != true ]; then
+                echo "::error::OAuth authentication was selected, but CWS_CLIENT_ID, CWS_CLIENT_SECRET, and CWS_REFRESH_TOKEN are not all configured."
+                exit 1
+              fi
+              echo "Using OAuth2 refresh-token authentication."
+              ;;
+            *)
+              echo "::error::No usable Chrome Web Store authentication is configured or auth_mode is invalid."
+              exit 1
+              ;;
+          esac
+
+          echo "value=$selected_mode" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate with Workload Identity Federation
+        if: ${{ steps.cws-auth-mode.outputs.value == 'wif' }}
+        id: auth-wif
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ secrets.CWS_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.CWS_SERVICE_ACCOUNT_EMAIL }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
+      - name: Authenticate with service account key
+        if: ${{ steps.cws-auth-mode.outputs.value == 'service_account_key' }}
+        id: auth-key
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          credentials_json: ${{ secrets.CWS_SERVICE_ACCOUNT_KEY_JSON }}
+          service_account: ${{ secrets.CWS_SERVICE_ACCOUNT_EMAIL }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
+      - name: Upload and optionally publish to Chrome Web Store
+        if: ${{ steps.release-mode.outputs.value != 'validate_only' }}
+        env:
+          CWS_ACCESS_TOKEN: ${{ steps.auth-wif.outputs.access_token || steps.auth-key.outputs.access_token || secrets.CWS_ACCESS_TOKEN }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_API_CLIENT: googleapis
+          CWS_PUBLISH: ${{ steps.release-mode.outputs.value == 'upload_and_publish' }}
+          CWS_ZIP_FILE: ${{ steps.package-extension.outputs.archive_path }}
+        run: node ./scripts/release/publish-chrome-web-store.mjs

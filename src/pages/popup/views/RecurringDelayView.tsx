@@ -1,9 +1,14 @@
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import useTabSelection from '@hooks/useTabSelection';
 import { Link } from '@tanstack/react-router';
-import { DelayedTab, RecurrencePattern } from '@types';
-import React, { useEffect, useId, useState } from 'react';
-import generateUniqueTabId from '@utils/generateUniqueTabId';
+import { RecurrencePattern } from '@types';
+import { scheduleTabs } from '@utils/delayedTabsRuntime';
+import { calculateNextWakeTime } from '@utils/recurrence';
 import { useTranslation } from 'react-i18next';
+
+import TimePicker from '../../../components/TimePicker';
+import { trackTabDelayed } from '../../../services/analytics';
 
 function FormControl({
   label,
@@ -14,7 +19,9 @@ function FormControl({
 }): React.ReactElement {
   return (
     <div className='form-control'>
-      <span className='mb-2 block text-sm font-medium'>{label}</span>
+      <span className='mb-1.5 block text-xs font-bold text-base-content/80'>
+        {label}
+      </span>
       {children}
     </div>
   );
@@ -23,148 +30,66 @@ function FormControl({
 function RecurringDelayView(): React.ReactElement {
   const { t } = useTranslation();
   const patternId = useId();
-  const timeId = useId();
   const daysOfWeekId = useId();
   const dayOfMonthId = useId();
   const endDateId = useId();
+  const {
+    activeTab,
+    allWindowTabs,
+    highlightedTabs,
+    loading,
+    persistSelectedMode,
+    selectedMode,
+    tabsToDelay,
+  } = useTabSelection();
 
-  const [activeTab, setActiveTab] = useState<chrome.tabs.Tab | null>(null);
-  const [highlightedTabs, setHighlightedTabs] = useState<chrome.tabs.Tab[]>([]);
-  const [allWindowTabs, setAllWindowTabs] = useState<chrome.tabs.Tab[]>([]);
-  const [selectedMode, setSelectedMode] = useState<'active' | 'highlighted' | 'window'>('active');
-  const [loading, setLoading] = useState(true);
   const [recurrenceType, setRecurrenceType] =
     useState<RecurrencePattern['type']>('daily');
-  const [time, setTime] = useState<string>('09:00');
-  const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]); // Default to weekdays
-  const [dayOfMonth, setDayOfMonth] = useState<number>(1);
-  const [endDate, setEndDate] = useState<string>('');
+  const [time, setTime] = useState('09:00');
+  const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [dayOfMonth, setDayOfMonth] = useState(1);
+  const [endDate, setEndDate] = useState('');
 
-  const weekDays = [
-    { value: 0, label: 'D' },
-    { value: 1, label: 'S' },
-    { value: 2, label: 'T' },
-    { value: 3, label: 'Q' },
-    { value: 4, label: 'Q' },
-    { value: 5, label: 'S' },
-    { value: 6, label: 'S' },
-  ];
-
-  useEffect(() => {
-    const getTabs = async (): Promise<void> => {
-      try {
-        if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
-          const [tab] = await chrome.tabs.query({
-            active: true,
-            currentWindow: true,
-          });
-          setActiveTab(tab);
-          
-          const highlighted = await chrome.tabs.query({
-            highlighted: true,
-            currentWindow: true,
-          });
-          setHighlightedTabs(highlighted);
-          
-          const { selectedMode: mainViewMode } = await chrome.storage.local.get('selectedMode');
-          if (mainViewMode) {
-            setSelectedMode(mainViewMode);
-          } else if (highlighted.length > 1) {
-            setSelectedMode('highlighted');
-          } else {
-            setSelectedMode('active');
-          }
-          
-          const allTabs = await chrome.tabs.query({
-            currentWindow: true,
-          });
-          setAllWindowTabs(allTabs);
-        } else {
-          const mockTab = {
-            id: 123,
-            url: 'https://example.com',
-            title: 'Example Page (DEV MODE)',
-            favIconUrl: 'https://www.google.com/favicon.ico',
-          } as chrome.tabs.Tab;
-          
-          setActiveTab(mockTab);
-          setHighlightedTabs([mockTab]);
-          setAllWindowTabs([mockTab]);
-        }
-      } catch (error) {
-        console.error('Error getting tabs:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    getTabs();
-  }, []);
+  const weekDays = useMemo(
+    () => [
+      { value: 0, label: t('common.weekdaysShort.sunday') },
+      { value: 1, label: t('common.weekdaysShort.monday') },
+      { value: 2, label: t('common.weekdaysShort.tuesday') },
+      { value: 3, label: t('common.weekdaysShort.wednesday') },
+      { value: 4, label: t('common.weekdaysShort.thursday') },
+      { value: 5, label: t('common.weekdaysShort.friday') },
+      { value: 6, label: t('common.weekdaysShort.saturday') },
+    ],
+    [t]
+  );
 
   useEffect(() => {
     if (recurrenceType === 'daily') {
       setSelectedDays([0, 1, 2, 3, 4, 5, 6]);
-    } else if (recurrenceType === 'weekdays') {
+      return;
+    }
+
+    if (recurrenceType === 'weekdays') {
       setSelectedDays([1, 2, 3, 4, 5]);
-    } else if (recurrenceType === 'weekly') {
+      return;
+    }
+
+    if (recurrenceType === 'weekly') {
       setSelectedDays([new Date().getDay()]);
     }
   }, [recurrenceType]);
 
   const toggleDay = (day: number): void => {
-    if (selectedDays.includes(day)) {
-      setSelectedDays(selectedDays.filter((d) => d !== day));
-    } else {
-      setSelectedDays([...selectedDays, day].sort());
-    }
-  };
-
-  const getTabsToDelay = (): chrome.tabs.Tab[] => {
-    switch (selectedMode) {
-      case 'active':
-        return activeTab ? [activeTab] : [];
-      case 'highlighted':
-        return highlightedTabs;
-      case 'window':
-        return allWindowTabs;
-      default:
-        return activeTab ? [activeTab] : [];
-    }
+    setSelectedDays((current) =>
+      current.includes(day)
+        ? current.filter((value) => value !== day)
+        : [...current, day].sort()
+    );
   };
 
   const handleDelay = async (): Promise<void> => {
-    const tabsToDelay = getTabsToDelay();
-    if (tabsToDelay.length === 0) return;
-
-    const now = new Date();
-    const [hours, minutes] = time.split(':').map(Number);
-    const firstWakeTime = new Date();
-    firstWakeTime.setHours(hours, minutes, 0, 0);
-
-    if (firstWakeTime.getTime() < now.getTime()) {
-      firstWakeTime.setDate(firstWakeTime.getDate() + 1);
-    }
-
-    if (recurrenceType === 'monthly') {
-      firstWakeTime.setDate(dayOfMonth);
-      if (firstWakeTime.getTime() < now.getTime()) {
-        firstWakeTime.setMonth(firstWakeTime.getMonth() + 1);
-      }
-    }
-
-    if (recurrenceType === 'weekly' || recurrenceType === 'custom') {
-      const currentDay = now.getDay();
-      let daysUntilNext = 7;
-
-      for (let i = 1; i <= 7; i++) {
-        const checkDay = (currentDay + i) % 7;
-        if (selectedDays.includes(checkDay)) {
-          daysUntilNext = i;
-          break;
-        }
-      }
-
-      firstWakeTime.setDate(now.getDate() + daysUntilNext);
+    if (tabsToDelay.length === 0) {
+      return;
     }
 
     const recurrencePattern: RecurrencePattern = {
@@ -174,61 +99,20 @@ function RecurringDelayView(): React.ReactElement {
       dayOfMonth: recurrenceType === 'monthly' ? dayOfMonth : undefined,
       endDate: endDate ? new Date(endDate).getTime() : undefined,
     };
+    const firstWakeTime = calculateNextWakeTime(recurrencePattern);
 
-    const windowSessionId =
-      selectedMode === 'window' ? generateUniqueTabId() : undefined;
-
-    if (
-      typeof chrome !== 'undefined' &&
-      chrome.storage &&
-      chrome.storage.local
-    ) {
-      chrome.storage.local.get({ delayedTabs: [] }, async (data) => {
-        const { delayedTabs } = data;
-        const tabIds: number[] = [];
-        
-        for (const tab of tabsToDelay) {
-          if (!tab.id) continue;
-
-          const newTabId = generateUniqueTabId();
-
-          const tabInfo: DelayedTab = {
-            id: newTabId,
-            url: tab.url,
-            title: tab.title,
-            favicon: tab.favIconUrl,
-            createdAt: Date.now(),
-            wakeTime: firstWakeTime.getTime(),
-            recurrencePattern,
-            isRecurring: true,
-            windowSessionId,
-            windowIndex: typeof tab.index === 'number' ? tab.index : undefined,
-          };
-
-          delayedTabs.push(tabInfo);
-
-          if (chrome.alarms) {
-            await chrome.alarms.create(`delayed-tab-${tabInfo.id}`, {
-              when: firstWakeTime.getTime(),
-            });
-          }
-          
-          tabIds.push(tab.id);
-        }
-
-        await chrome.storage.local.set({ delayedTabs });
-
-        if (chrome.tabs && tabIds.length > 0) {
-          await chrome.tabs.remove(tabIds);
-        }
-
-        if (window.close) {
-          window.close();
-        }
-      });
-    } else {
-      console.log('Development mode - tabs would be delayed:', tabsToDelay);
+    if (!firstWakeTime) {
+      return;
     }
+
+    await persistSelectedMode();
+    void trackTabDelayed({
+      presetId: 'recurring',
+      count: tabsToDelay.length,
+      mode: selectedMode,
+    });
+    await scheduleTabs(tabsToDelay, firstWakeTime, recurrencePattern, selectedMode === 'window');
+    window.close();
   };
 
   if (loading) {
@@ -240,146 +124,176 @@ function RecurringDelayView(): React.ReactElement {
   }
 
   return (
-    <div className='card w-80 rounded-none bg-base-300 shadow-xl'>
-      <div className='card-body p-5'>
-        <div className='mb-4 flex items-center'>
-          <Link
-            to='/'
-            className='btn btn-circle btn-ghost btn-sm mr-3 transition-all duration-200 hover:bg-base-100'
-            aria-label={t('common.back')}
-            viewTransition={{ types: ['slide-right'] }}
-          >
-            <FontAwesomeIcon icon='arrow-left' />
-          </Link>
-          <h2 className='card-title font-bold text-delayo-orange'>
-            {t('recurringDelay.title')}
-          </h2>
-        </div>
+    <div className='card w-[40rem] max-w-full rounded-none bg-base-300 shadow-md'>
+      <div className='card-body p-6'>
+        {/* Header */}
+        <div className='mb-5 flex items-center justify-between'>
+          <div className='flex items-center'>
+            <Link
+              to='/'
+              className='btn btn-circle btn-ghost btn-sm mr-2.5 touch-manipulation transition-colors duration-200 hover:bg-base-100 focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+              aria-label={t('common.back')}
+            >
+              <FontAwesomeIcon icon='arrow-left' aria-hidden='true' />
+            </Link>
+            <h2 className='card-title text-base font-bold text-delayo-orange sm:text-lg'>
+              {t('recurringDelay.title')}
+            </h2>
+          </div>
 
-        <div className='mb-4'>
-          <div className='text-sm font-medium text-base-content/80 mb-2'>{t('popup.delay')}:</div>
-          <div className='rounded-lg bg-base-100/70 p-4 shadow-sm transition-all duration-200 hover:bg-base-100'>
-            {selectedMode === 'active' && activeTab && (
-              <div className='flex items-center'>
-                {activeTab.favIconUrl && (
-                  <img
-                    src={activeTab.favIconUrl}
-                    alt='Tab favicon'
-                    className='mr-3 h-5 w-5'
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                )}
-                <div className='overflow-hidden'>
-                  <div className='truncate text-sm font-medium text-base-content/80'>
-                    {activeTab.title}
-                  </div>
-                  <div className='truncate text-xs text-base-content/60'>
-                    {activeTab.url}
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {selectedMode === 'highlighted' && (
-              <div className='text-sm font-medium text-base-content/80'>
-                {highlightedTabs.length} {highlightedTabs.length === 1 ? t('common.tabs.singular') : t('common.tabs')} {t('popup.selected')}
-              </div>
-            )}
-            
-            {selectedMode === 'window' && (
-              <div className='text-sm font-medium text-base-content/80'>
-                {allWindowTabs.length} {allWindowTabs.length === 1 ? t('common.tabs.singular') : t('common.tabs')} {t('popup.inWindow')}
-              </div>
-            )}
+          <div className='text-xs font-semibold text-base-content/70'>
+            {tabsToDelay.length}{' '}
+            {tabsToDelay.length === 1
+              ? t('common.tabs.singular')
+              : t('common.tabs')}
           </div>
         </div>
 
-        <FormControl label={t('recurringDelay.frequency')}>
-          <select
-            id={patternId}
-            className='select select-bordered w-full border-none bg-base-100/50 shadow-sm transition-all duration-200 focus:bg-base-100/80'
-            value={recurrenceType}
-            onChange={(e) =>
-              setRecurrenceType(e.target.value as RecurrencePattern['type'])
-            }
-          >
-            <option value='daily'>{t('recurringDelay.daily')}</option>
-            <option value='weekdays'>{t('recurringDelay.weekdays')}</option>
-            <option value='weekly'>{t('recurringDelay.weekly')}</option>
-            <option value='monthly'>{t('recurringDelay.monthly')}</option>
-            <option value='custom'>{t('customDelay.title')}</option>
-          </select>
-        </FormControl>
-
-        <FormControl label={t('recurringDelay.selectTime')}>
-          <input
-            id={timeId}
-            type='time'
-            className='input input-bordered w-full border-none bg-base-100/50 shadow-sm transition-all duration-200 focus:bg-base-100/80'
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-          />
-        </FormControl>
-
-        {(recurrenceType === 'weekly' || recurrenceType === 'custom') && (
-          <FormControl label={t('recurringDelay.selectDay')}>
-            <div
-              id={daysOfWeekId}
-              className='mt-1 flex flex-wrap justify-between gap-1'
-            >
-              {weekDays.map((day) => (
-                <button
-                  key={day.value}
-                  type='button'
-                  className={`btn btn-circle btn-sm ${selectedDays.includes(day.value) ? 'btn-primary' : 'btn-outline'}`}
-                  onClick={() => toggleDay(day.value)}
-                  aria-label={`Toggle ${day.label}`}
-                  aria-pressed={selectedDays.includes(day.value)}
-                >
-                  {day.label}
-                </button>
-              ))}
+        {/* Tab Summary Preview */}
+        <div className='mb-3 rounded-lg border border-base-200/60 bg-base-100/70 px-3 py-2'>
+          {selectedMode === 'active' && activeTab && (
+            <div className='flex items-center'>
+              {activeTab.favIconUrl && (
+                <img
+                  src={activeTab.favIconUrl}
+                  alt={t('common.faviconAlt')}
+                  width={16}
+                  height={16}
+                  className='mr-2.5 h-4 w-4 rounded-sm'
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
+              <div className='truncate text-xs font-medium text-base-content/80 sm:text-sm'>
+                {activeTab.title}
+              </div>
             </div>
-          </FormControl>
-        )}
+          )}
 
-        {recurrenceType === 'monthly' && (
-          <FormControl label={t('recurringDelay.selectDay')}>
-            <input
-              id={dayOfMonthId}
-              type='number'
-              className='input input-bordered w-full border-none bg-base-100/50 shadow-sm transition-all duration-200 focus:bg-base-100/80'
-              min='1'
-              max='31'
-              value={dayOfMonth}
-              onChange={(e) =>
-                setDayOfMonth(
-                  Math.min(31, Math.max(1, parseInt(e.target.value, 10) || 1))
-                )
-              }
-            />
-          </FormControl>
-        )}
+          {selectedMode === 'highlighted' && (
+            <div className='text-xs font-medium text-base-content/80 sm:text-sm'>
+              {highlightedTabs.length}{' '}
+              {highlightedTabs.length === 1
+                ? t('common.tabs.singular')
+                : t('common.tabs')}{' '}
+              {t('popup.selected')}
+            </div>
+          )}
 
-        <FormControl label={t('manageTabs.endDate')}>
-          <input
-            id={endDateId}
-            type='date'
-            className='input input-bordered w-full border-none bg-base-100/50 shadow-sm transition-all duration-200 focus:bg-base-100/80'
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            min={new Date().toISOString().split('T')[0]}
-          />
-        </FormControl>
+          {selectedMode === 'window' && (
+            <div className='text-xs font-medium text-base-content/80 sm:text-sm'>
+              {allWindowTabs.length}{' '}
+              {allWindowTabs.length === 1
+                ? t('common.tabs.singular')
+                : t('common.tabs')}{' '}
+              {t('popup.inWindow')}
+            </div>
+          )}
+        </div>
 
-        <div className='card-actions mt-4 justify-end'>
+        {/* Main 2-Column Content */}
+        <div className='grid grid-cols-2 items-start gap-3'>
+          {/* Left Column: Frequency & Day Selectors */}
+          <div className='flex flex-col gap-3 rounded-lg border border-base-200/60 bg-base-100/50 p-3'>
+            <FormControl label={t('recurringDelay.frequency')}>
+              <select
+                id={patternId}
+                className='select select-bordered select-sm w-full bg-base-200 font-semibold text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+                value={recurrenceType}
+                onChange={(event) =>
+                  setRecurrenceType(
+                    event.target.value as RecurrencePattern['type']
+                  )
+                }
+              >
+                <option value='daily'>{t('recurringDelay.daily')}</option>
+                <option value='weekdays'>{t('recurringDelay.weekdays')}</option>
+                <option value='weekly'>{t('recurringDelay.weekly')}</option>
+                <option value='monthly'>{t('recurringDelay.monthly')}</option>
+                <option value='custom'>{t('customDelay.title')}</option>
+              </select>
+            </FormControl>
+
+            {(recurrenceType === 'weekly' || recurrenceType === 'custom') && (
+              <FormControl label={t('recurringDelay.selectDay')}>
+                <div
+                  id={daysOfWeekId}
+                  className='flex flex-wrap justify-between gap-1'
+                >
+                  {weekDays.map((day) => (
+                    <button
+                      key={day.value}
+                      type='button'
+                      className={`btn btn-circle btn-xs h-7 w-7 focus-visible:ring-2 focus-visible:ring-delayo-orange/60 ${selectedDays.includes(day.value) ? 'btn-primary font-bold' : 'btn-outline'}`}
+                      onClick={() => toggleDay(day.value)}
+                      aria-label={t('recurringDelay.toggleDay', {
+                        day: day.label,
+                      })}
+                      aria-pressed={selectedDays.includes(day.value)}
+                    >
+                      {day.label}
+                    </button>
+                  ))}
+                </div>
+              </FormControl>
+            )}
+
+            {recurrenceType === 'monthly' && (
+              <FormControl label={t('recurringDelay.selectDay')}>
+                <div className='flex items-center gap-2'>
+                  <span className='text-xs text-base-content/70'>Dia:</span>
+                  <input
+                    id={dayOfMonthId}
+                    type='number'
+                    className='input input-sm input-bordered w-20 bg-base-200 font-bold'
+                    min='1'
+                    max='31'
+                    value={dayOfMonth}
+                    onChange={(event) =>
+                      setDayOfMonth(
+                        Math.min(
+                          31,
+                          Math.max(1, parseInt(event.target.value, 10) || 1)
+                        )
+                      )
+                    }
+                  />
+                  <span className='text-xs text-base-content/70'>
+                    de cada mês
+                  </span>
+                </div>
+              </FormControl>
+            )}
+
+            <FormControl label={t('manageTabs.endDate')}>
+              <input
+                id={endDateId}
+                type='date'
+                className='input input-sm input-bordered w-full bg-base-200 font-medium'
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+              />
+            </FormControl>
+          </div>
+
+          <div className='rounded-lg border border-base-200/60 bg-base-100/50 p-3'>
+            <span className='mb-2 block text-xs font-bold text-base-content/80'>
+              {t('recurringDelay.selectTime')}
+            </span>
+
+            <TimePicker value={time} onChange={setTime} isPopup={true} />
+          </div>
+        </div>
+
+        <div className='mt-3 border-t border-base-200 pt-3'>
           <button
-            className='btn btn-primary'
-            onClick={handleDelay}
+            type='button'
+            className='btn btn-primary btn-sm w-full font-semibold focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+            onClick={() => void handleDelay()}
             disabled={
-              getTabsToDelay().length === 0 ||
+              tabsToDelay.length === 0 ||
               (recurrenceType === 'custom' && selectedDays.length === 0)
             }
           >

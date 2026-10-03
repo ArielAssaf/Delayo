@@ -10,10 +10,21 @@
     "settings": "Settings",
     "tabs": "Tabs",
     "tabs.singular": "Tab",
+    "faviconAlt": "Tab favicon",
+    "weekdaysShort": {
+      "sunday": "S",
+      "monday": "M",
+      "tuesday": "T",
+      "wednesday": "W",
+      "thursday": "T",
+      "friday": "F",
+      "saturday": "S"
+    },
     "theme": {
       "light": "Light",
       "dark": "Dark",
-      "system": "System"
+      "system": "System",
+      "toggle": "Switch to {{theme}} mode"
     }
   },
   "popup": {
@@ -21,17 +32,21 @@
     "delay": "Delay",
     "selected": "selected",
     "inWindow": "in this window",
+    "quickTurbo": "Turbo (+1h)",
+    "quickTurboDesc": "Quickly delay for 1 hour",
     "tabs": {
       "active": "Active Tab",
       "highlighted": "Selected Tabs",
       "window": "Current Window"
     },
     "delayOptions": {
-      "laterToday": "Later today (in {{hours}} hours)",
+      "laterToday": "Later today (+{{hours}}h)",
+      "laterTonight": "Late night (+{{hours}}h)",
+      "thisMorning": "This Morning (at {{time}})",
       "tomorrow": "Tomorrow (at {{time}})",
       "weekend": "This weekend ({{day}}, {{time}})",
       "nextWeek": "Next week ({{day}}, {{time}})",
-      "oneWeek": "In one week",
+      "oneWeek": "One week from now ({{date}})",
       "nextMonth": "Next month",
       "custom": "Custom date & time",
       "recurring": "Recurring"
@@ -48,12 +63,24 @@
     "actions": {
       "manageTabs": "Manage Delayed Tabs",
       "openSettings": "Settings"
+    },
+    "notFound": {
+      "title": "Page Not Found",
+      "description": "The page you're looking for doesn't exist or has been moved.",
+      "backHome": "Return to Home"
     }
   },
   "customDelay": {
     "title": "Custom Delay",
     "selectDateTime": "Select Date & Time",
     "delayTab": "Delay Tab"
+  },
+  "calendar": {
+    "openNavigation": "Open calendar navigation",
+    "closeNavigation": "Close calendar navigation",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "year": "Year"
   },
   "recurringDelay": {
     "title": "Recurring Schedule",
@@ -64,12 +91,20 @@
     "monthly": "Monthly",
     "selectTime": "Select Time",
     "selectDay": "Select Day",
-    "delayTab": "Schedule Recurring Delay"
+    "delayTab": "Schedule Recurring Delay",
+    "toggleDay": "Toggle {{day}}"
   },
   "settings": {
     "title": "Settings",
     "general": "General",
+    "saveDescription": "Delay options and local metrics are applied after you click Save.",
     "theme": "Theme",
+    "tabs": {
+      "label": "Settings sections",
+      "general": "General",
+      "stats": "Statistics",
+      "about": "About & support"
+    },
     "reset": "Reset",
     "notifications": "Notifications",
     "enableNotifications": "Enable Notifications",
@@ -78,9 +113,33 @@
     "hours": "hours",
     "tomorrow": "Tomorrow",
     "weekend": "This Weekend",
+    "day": "Day",
+    "nextWeek": "Next Week",
     "nextMonth": "Next Month",
     "sameDayOfMonth": "Same day of month",
-    "sameDayOfWeek": "Same day of week"
+    "sameDayOfWeek": "Same day of week",
+    "specificDay": "Specific day",
+    "saved": "Settings saved successfully!",
+    "analytics": {
+      "title": "Privacy & Telemetry",
+      "enable": "Enable anonymous local usage metrics",
+      "description": "Metrics are stored locally in your browser to display your productivity dashboard."
+    },
+    "about": {
+      "title": "About & support",
+      "description": "Explore the project, suggest improvements, or report a problem."
+    }
+  },
+  "stats": {
+    "title": "Productivity Insights",
+    "totalDelayed": "Tabs delayed",
+    "totalWoken": "Tabs restored",
+    "favoritePreset": "Top preset",
+    "focusPreserved": "Focus preserved",
+    "focusPreservedDescription": "An estimate based on 15 minutes per delayed tab, not a measurement of actual focus time.",
+    "noData": "Your productivity stats will appear here as you use Delayo.",
+    "minutes": "min",
+    "hours": "h"
   },
   "manageTabs": {
     "title": "Management",
@@ -99,22 +158,18 @@
     "selectMode": "Enable multiple selection mode",
     "cancelSelection": "Cancel selection",
     "wakeUp": "Wake Up",
+    "editWakeTime": "Edit wake time",
     "remove": "Remove",
     "untitledTab": "Untitled tab",
+    "unknownTab": "Unknown tab",
+    "toggleSelection": "Toggle selection",
     "actions": "Actions",
-    "window": "Window",
-    "windowWithIndex": "Window {{index}}",
-    "tabCount": "{{count}} tab",
-    "tabCount_plural": "{{count}} tabs",
-    "wakeWindow": "Wake Window",
-    "removeWindow": "Remove Window",
-    "wakeTab": "Wake Tab",
-    "editSchedule": "Edit wake time",
-    "newWakeTimeLabel": "Choose a new wake time",
-    "saveChanges": "Save changes",
-    "saving": "Saving...",
-    "invalidWakeTime": "Choose a future date and time.",
-    "updateError": "Unable to update wake time. Try again."
+    "actionsWakeNow": "Wake {{count}} {{label}} now",
+    "timeUnits": {
+      "day": "d",
+      "hour": "h",
+      "minute": "m"
+    }
   },
   "donation": {
     "title": "Support the Project",
@@ -146,11 +201,19 @@
       "title": "Settings & Management",
       "description": "Customize the extension and manage your delayed tabs easily.",
       "gearClick": "Click on the gear icon ⚙️",
+      "or": "or",
       "rightClick": "Right-click on the extension icon and select 'Options' to access settings."
     },
     "next": "Next",
     "back": "Back",
     "finish": "Finish",
     "close": "Close"
+  },
+  "options": {
+    "links": {
+      "repository": "GitHub Repository",
+      "features": "Propose New Features",
+      "issues": "Report Issues"
+    }
   }
 }

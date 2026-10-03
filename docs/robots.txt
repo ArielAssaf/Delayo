@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://allud1t.github.io/Delayo/sitemap.xml

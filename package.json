@@ -1,19 +1,22 @@
 {
-  "name": "chrome-ext-starter",
-  "displayName": "Chrome Extension Starter",
-  "description": "Get started with building your dream Chrome extension effortlessly! Our starter kit combines the power of cutting-edge technologies like Vite, TypeScript, React, CRX, Tailwind CSS, and DaisyUI, making extension development a breeze.",
+  "name": "delayo",
+  "displayName": "Delayo",
+  "description": "Snooze tabs, boost focus, and declutter your browser. Fast, modern, and 100% privacy-first Chrome extension.",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.3.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test": "vitest run",
+    "lint": "eslint . --ext js,mjs,ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky install",
     "release": "standard-version",
-    "zip": "powershell -ExecutionPolicy Bypass -File ./scripts/zip.ps1"
+    "release:validate": "node ./scripts/release/validate-release.mjs",
+    "release:cws": "node ./scripts/release/publish-chrome-web-store.mjs",
+    "zip": "pwsh -File ./scripts/zip.ps1"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
@@ -26,6 +29,8 @@
     "react-i18next": "^15.4.1"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
     "@crxjs/vite-plugin": "^1.0.14",
     "@eslint/js": "^9.23.0",
     "@ianvs/prettier-plugin-sort-imports": "^4.2.1",
@@ -46,6 +51,7 @@
     "eslint-plugin-react": "^7.34.1",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
+    "googleapis": "^176.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.0",
     "pnpm": "^10.12.1",
@@ -60,7 +66,8 @@
     "ts-prune": "^0.10.3",
     "typescript": "^5.4.3",
     "vite": "^5.4.19",
-    "vite-tsconfig-paths": "^4.3.2"
+    "vite-tsconfig-paths": "^4.3.2",
+    "vitest": "^2.1.9"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx}": [

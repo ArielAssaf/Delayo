@@ -1,389 +1,99 @@
-// filepath: /home/burkhard/Code/delayo/src/popup/views/MainView.tsx
+import React, { useCallback, useMemo } from 'react';
 import { faHourglassHalf } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import useDelaySettings from '@hooks/useDelaySettings';
+import useTabSelection from '@hooks/useTabSelection';
 import { Link } from '@tanstack/react-router';
-import { DelayOption } from '@types';
-import React, { useEffect, useState } from 'react';
+import { DelayOption, TabSelectionMode } from '@types';
+import { scheduleTabs } from '@utils/delayedTabsRuntime';
+import { createPresetDelayOptions } from '@utils/delayPresets';
 import { useTranslation } from 'react-i18next';
 
+import DonationButton from '../../../components/DonationButton';
+import { trackTabDelayed } from '../../../services/analytics';
 import useTheme from '../../../utils/useTheme';
-import generateUniqueTabId from '@utils/generateUniqueTabId';
-
-interface DelaySettings {
-  laterToday: number; // hours
-  tomorrowTime: string; // format HH:MM
-  weekendDay: 'saturday' | 'sunday';
-  weekendTime: string; // format HH:MM
-  nextMonthSameDay: boolean; // if true, same month day; if false, same week day near the same day
-}
 
 function MainView(): React.ReactElement {
-  const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<chrome.tabs.Tab | null>(null);
-  const [highlightedTabs, setHighlightedTabs] = useState<chrome.tabs.Tab[]>([]);
-  const [allWindowTabs, setAllWindowTabs] = useState<chrome.tabs.Tab[]>([]);
-  const [selectedMode, setSelectedMode] = useState<'active' | 'highlighted' | 'window'>('active');
-  const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState<DelaySettings>({
-    laterToday: 3, // 3 hours later
-    tomorrowTime: '09:00',
-    weekendDay: 'saturday',
-    weekendTime: '09:00',
-    nextMonthSameDay: true,
-  });
+  const { i18n, t } = useTranslation();
   const { theme, toggleTheme } = useTheme();
+  const { loading: settingsLoading, settings } = useDelaySettings();
+  const {
+    activeTab,
+    allWindowTabs,
+    highlightedTabs,
+    loading: tabsLoading,
+    persistSelectedMode,
+    selectedMode,
+    setSelectedMode,
+    tabsToDelay,
+  } = useTabSelection();
 
-  useEffect(() => {
-    const getTabs = async (): Promise<void> => {
-      try {
-        if (typeof chrome !== 'undefined' && chrome.tabs) {
-          // Actual tab
-          const [tab] = await chrome.tabs.query({
-            active: true,
-            currentWindow: true,
-          });
-          setActiveTab(tab);
-          
-          // Selected by user
-          const highlighted = await chrome.tabs.query({
-            highlighted: true,
-            currentWindow: true,
-          });
-          setHighlightedTabs(highlighted);
-          
-          // Intelligence to decide method based on number of tabs selected
-          if (highlighted.length > 1) {
-            setSelectedMode('highlighted');
-          } else {
-            setSelectedMode('active');
-          }
-          
-          // For window - all tabs
-          const allTabs = await chrome.tabs.query({
-            currentWindow: true,
-          });
-          setAllWindowTabs(allTabs);
-        } else {
-          // dev
-          const mockTab = {
-            id: 123,
-            url: 'https://example.com',
-            title: 'Example Page (DEV MODE)',
-            favIconUrl: 'https://www.google.com/favicon.ico',
-          } as chrome.tabs.Tab;
-          
-          setActiveTab(mockTab);
-          setHighlightedTabs([mockTab]);
-          setAllWindowTabs([mockTab]);
-        }
-      } catch (error) {
-        console.error('Error getting tabs:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loading = settingsLoading || tabsLoading;
+  const locale =
+    i18n.language ||
+    document.documentElement.lang ||
+    navigator.language ||
+    'en';
+  const translate = useCallback(
+    (key: string, options?: Record<string, unknown>): string =>
+      t(key, options) as string,
+    [t]
+  );
 
-    getTabs();
-  }, []);
-
-  // load settings
-  useEffect(() => {
-    const loadSettings = async (): Promise<void> => {
-      try {
-        if (typeof chrome !== 'undefined' && chrome.storage) {
-          const { delaySettings } =
-            await chrome.storage.local.get('delaySettings');
-          if (delaySettings) {
-            setSettings(delaySettings);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading settings:', error);
-      }
-    };
-
-    loadSettings();
-  }, []);
-
-  const getTimeFromString = (
-    timeString: string
-  ): { hours: number; minutes: number } => {
-    const [hours, minutes] = timeString.split(':').map(Number);
-    return { hours, minutes };
-  };
-
-  const delayOptions: DelayOption[] = [
-    {
-      id: 'later_today',
-      label: t('popup.delayOptions.laterToday', { hours: settings.laterToday }),
-      hours: settings.laterToday,
-    },
-    {
-      id: 'tomorrow',
-      label: t('popup.delayOptions.tomorrow', { time: settings.tomorrowTime }),
-      custom: true,
-      calculateTime: () => {
-        const { hours, minutes } = getTimeFromString(settings.tomorrowTime);
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(hours, minutes, 0, 0);
-        return tomorrow.getTime();
-      },
-    },
-    {
-      id: 'weekend',
-      label: t('popup.delayOptions.weekend', { 
-        day: t(`popup.weekdays.${settings.weekendDay}`), 
-        time: settings.weekendTime 
+  const delayOptions = useMemo<DelayOption[]>(
+    () =>
+      createPresetDelayOptions({
+        locale,
+        settings,
+        translate,
       }),
-      custom: true,
-      calculateTime: () => {
-        const { hours, minutes } = getTimeFromString(settings.weekendTime);
-        const today = new Date();
-        const currentDay = today.getDay();
-        const targetDay = settings.weekendDay === 'saturday' ? 6 : 0;
-
-        let daysUntilTarget;
-        if (currentDay === targetDay) {
-          daysUntilTarget = 7;
-        } else if (currentDay < targetDay) {
-          daysUntilTarget = targetDay - currentDay;
-        } else {
-          daysUntilTarget = 7 - (currentDay - targetDay);
-        }
-
-        const targetDate = new Date();
-        targetDate.setDate(today.getDate() + daysUntilTarget);
-        targetDate.setHours(hours, minutes, 0, 0);
-        return targetDate.getTime();
-      },
-    },
-    {
-      id: 'next_week',
-      label: t('popup.delayOptions.nextWeek', {
-        day: t('popup.weekdays.sunday'),
-        time: '',
-      }).replace(', ', ''),
-      custom: true,
-      calculateTime: () => {
-        const today = new Date();
-        const daysUntilSunday = (7 - today.getDay()) % 7 || 7;
-        const targetDate = new Date(today);
-        targetDate.setDate(today.getDate() + daysUntilSunday);
-        return targetDate.getTime();
-      },
-    },
-    {
-      id: 'one_week',
-      label: t('popup.delayOptions.oneWeek'),
-      custom: true,
-      calculateTime: () => {
-        const targetDate = new Date();
-        targetDate.setDate(targetDate.getDate() + 7);
-        return targetDate.getTime();
-      },
-    },
-    {
-      id: 'next_month',
-      label: (() => {
-        const today = new Date();
-        const targetDate = new Date();
-        let formattedDate = '';
-        
-        if (settings.nextMonthSameDay) {
-          targetDate.setMonth(today.getMonth() + 1);
-          const lastDayOfNextMonth = new Date(
-            today.getFullYear(),
-            today.getMonth() + 2,
-            0
-          ).getDate();
-          if (today.getDate() > lastDayOfNextMonth) {
-            targetDate.setDate(lastDayOfNextMonth);
-          }
-          const { i18n } = useTranslation();
-          const locale = i18n.language || navigator.language || 'pt-BR';
-          formattedDate = targetDate.toLocaleDateString(locale, { day: 'numeric', month: 'long' });
-        } else {
-          const currentDay = today.getDay();
-          const currentWeekOfMonth = Math.ceil(today.getDate() / 7);
-          targetDate.setMonth(today.getMonth() + 1);
-          targetDate.setDate(1);
-
-          while (targetDate.getDay() !== currentDay) {
-            targetDate.setDate(targetDate.getDate() + 1);
-          }
-
-          targetDate.setDate(
-            targetDate.getDate() + (currentWeekOfMonth - 1) * 7
-          );
-
-          if (targetDate.getMonth() !== (today.getMonth() + 1) % 12) {
-            targetDate.setDate(1);
-            targetDate.setMonth((today.getMonth() + 1) % 12);
-
-            let lastOccurrence = 0;
-            const daysInMonth = new Date(
-              targetDate.getFullYear(),
-              targetDate.getMonth() + 1,
-              0
-            ).getDate();
-
-            for (let i = 1; i <= daysInMonth; i++) {
-              targetDate.setDate(i);
-              if (targetDate.getDay() === currentDay) {
-                lastOccurrence = i;
-              }
-            }
-
-            targetDate.setDate(lastOccurrence);
-          }
-
-          const { i18n } = useTranslation();
-          const locale = i18n.language || navigator.language || 'pt-BR';
-          formattedDate = targetDate.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
-        }
-        
-        const { i18n } = useTranslation();
-        const locale = i18n.language || navigator.language || 'pt-BR';
-        let timeStr;
-        
-        if (locale.startsWith('en')) {
-          const hours = today.getHours();
-          const ampm = hours >= 12 ? 'PM' : 'AM';
-          const hours12 = hours % 12 || 12;
-          timeStr = `${hours12}:${today.getMinutes().toString().padStart(2, '0')} ${ampm}`;
-        } else {
-          timeStr = `${today.getHours().toString().padStart(2, '0')}:${today.getMinutes().toString().padStart(2, '0')}`;
-        }
-        return `${t('popup.delayOptions.nextMonth')} (${formattedDate}, ${timeStr})`;
-      })(),
-      custom: true,
-      calculateTime: () => {
-        const today = new Date();
-        const targetDate = new Date();
-
-        if (settings.nextMonthSameDay) {
-          targetDate.setMonth(today.getMonth() + 1);
-          const lastDayOfNextMonth = new Date(
-            today.getFullYear(),
-            today.getMonth() + 2,
-            0
-          ).getDate();
-          if (today.getDate() > lastDayOfNextMonth) {
-            targetDate.setDate(lastDayOfNextMonth);
-          }
-        } else {
-          const currentDay = today.getDay();
-          const currentWeekOfMonth = Math.ceil(today.getDate() / 7);
-          targetDate.setMonth(today.getMonth() + 1);
-          targetDate.setDate(1);
-
-          while (targetDate.getDay() !== currentDay) {
-            targetDate.setDate(targetDate.getDate() + 1);
-          }
-
-          targetDate.setDate(
-            targetDate.getDate() + (currentWeekOfMonth - 1) * 7
-          );
-
-          if (targetDate.getMonth() !== (today.getMonth() + 1) % 12) {
-            targetDate.setDate(1);
-            targetDate.setMonth((today.getMonth() + 1) % 12);
-
-            let lastOccurrence = 0;
-            const daysInMonth = new Date(
-              targetDate.getFullYear(),
-              targetDate.getMonth() + 1,
-              0
-            ).getDate();
-
-            for (let i = 1; i <= daysInMonth; i++) {
-              targetDate.setDate(i);
-              if (targetDate.getDay() === currentDay) {
-                lastOccurrence = i;
-              }
-            }
-
-            targetDate.setDate(lastOccurrence);
-          }
-        }
-        targetDate.setHours(today.getHours(), today.getMinutes(), 0, 0);
-        return targetDate.getTime();
-      },
-    },
-  ];
-
-  const getTabsToDelay = (): chrome.tabs.Tab[] => {
-    switch (selectedMode) {
-      case 'active':
-        return activeTab ? [activeTab] : [];
-      case 'highlighted':
-        return highlightedTabs;
-      case 'window':
-        return allWindowTabs;
-      default:
-        return activeTab ? [activeTab] : [];
-    }
-  };
+    [locale, settings, translate]
+  );
 
   const handleDelay = async (option: DelayOption): Promise<void> => {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      await chrome.storage.local.set({ selectedMode });
+    if (tabsToDelay.length === 0) {
+      return;
     }
-    const tabsToDelay = getTabsToDelay();
-    if (tabsToDelay.length === 0) return;
 
-    const windowSessionId =
-      selectedMode === 'window' ? generateUniqueTabId() : undefined;
+    await persistSelectedMode();
 
-    let wakeTime: number;
-    if (option.calculateTime) {
-      wakeTime = option.calculateTime();
-    } else {
-      const now = Date.now();
-      wakeTime =
-        now +
+    const wakeTime =
+      option.calculateTime?.() ??
+      Date.now() +
         (option.hours ? option.hours * 60 * 60 * 1000 : 0) +
         (option.days ? option.days * 24 * 60 * 60 * 1000 : 0);
+
+    void trackTabDelayed({
+      presetId: option.id,
+      count: tabsToDelay.length,
+      mode: selectedMode,
+    });
+
+    await scheduleTabs(tabsToDelay, wakeTime, undefined, selectedMode === 'window');
+    window.close();
+  };
+
+  const handleQuickTurbo = async (): Promise<void> => {
+    if (tabsToDelay.length === 0) {
+      return;
     }
 
-    await chrome.storage.local.get({ delayedTabs: [] }, async (data) => {
-      const { delayedTabs } = data;
-      const tabIds: number[] = [];
-      
-      for (const tab of tabsToDelay) {
-        if (!tab.id) continue;
+    await persistSelectedMode();
 
-        const newTabId = generateUniqueTabId();
+    const wakeTime = Date.now() + 60 * 60 * 1000;
 
-        const tabInfo = {
-          id: newTabId,
-          url: tab.url,
-          title: tab.title,
-          favicon: tab.favIconUrl,
-          createdAt: Date.now(),
-          wakeTime,
-          windowSessionId,
-          windowIndex: typeof tab.index === 'number' ? tab.index : undefined,
-        };
-
-        delayedTabs.push(tabInfo);
-
-        await chrome.alarms.create(`delayed-tab-${tabInfo.id}`, {
-          when: wakeTime,
-        });
-        
-        tabIds.push(tab.id);
-      }
-      
-      await chrome.storage.local.set({ delayedTabs });
-
-      if (tabIds.length > 0) {
-        await chrome.tabs.remove(tabIds);
-      }
-
-      window.close();
+    void trackTabDelayed({
+      presetId: 'quick_turbo',
+      count: tabsToDelay.length,
+      mode: selectedMode,
     });
+
+    await scheduleTabs(tabsToDelay, wakeTime, undefined, selectedMode === 'window');
+    window.close();
+  };
+
+  const handleModeChange = (mode: TabSelectionMode): void => {
+    setSelectedMode(mode);
   };
 
   if (loading) {
@@ -395,194 +105,231 @@ function MainView(): React.ReactElement {
   }
 
   return (
-    <div className='card w-[40rem] rounded-none bg-base-300 shadow-md max-h-[600px] overflow-hidden'>
-      <div className='card-body p-6'>
-        <div className='mb-5 flex items-center justify-between'>
+    <div className='card w-[40rem] max-w-full rounded-none bg-base-300 shadow-md'>
+      <div className='card-body gap-0 px-6 pb-3 pt-5'>
+        {/* Header */}
+        <div className='mb-4 flex items-center justify-between'>
           <h2 className='card-title flex items-center font-bold text-delayo-orange'>
             <FontAwesomeIcon
               icon={faHourglassHalf}
               className='mr-2 h-5 w-5 text-delayo-orange'
+              aria-hidden='true'
             />
             Delayo
           </h2>
           <div className='flex items-center space-x-2'>
             <Link
               to='/settings'
-              className='btn btn-circle btn-ghost btn-sm transition-all duration-200 hover:bg-base-100'
-              viewTransition={{ types: ['slide-left'] }}
-              aria-label='Settings'
+              className='btn btn-circle btn-ghost btn-sm touch-manipulation transition-colors duration-200 hover:bg-base-100 focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+              aria-label={t('popup.actions.openSettings')}
             >
               <FontAwesomeIcon
                 icon='gear'
                 className='text-neutral-400 hover:text-delayo-orange'
+                aria-hidden='true'
               />
             </Link>
             <button
               type='button'
-              className='btn btn-circle btn-ghost btn-sm transition-all duration-200 hover:bg-base-100'
+              className='btn btn-circle btn-ghost btn-sm touch-manipulation transition-colors duration-200 hover:bg-base-100 focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
               onClick={toggleTheme}
-              aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+              aria-label={t('common.theme.toggle', {
+                theme:
+                  theme === 'light'
+                    ? t('common.theme.dark')
+                    : t('common.theme.light'),
+              })}
             >
               <FontAwesomeIcon
                 icon={theme === 'light' ? 'moon' : 'sun'}
                 className={
-                  theme === 'light' ? 'text-delayo-purple' : 'text-delayo-yellow'
+                  theme === 'light'
+                    ? 'text-delayo-purple'
+                    : 'text-delayo-yellow'
                 }
+                aria-hidden='true'
               />
             </button>
           </div>
         </div>
 
-        <div className='mb-5 flex flex-col space-y-3'>
-          <div className='flex items-center justify-between'>
-            <div className='text-sm font-medium text-base-content/80'>{t('popup.delay')}:</div>
-            <div className='flex space-x-2'>
+        {/* Tab Selection & Tab Info */}
+        <div className='mb-3 flex flex-col gap-2'>
+          <div className='flex items-center justify-between gap-3'>
+            <div className='text-sm font-medium text-base-content/80'>
+              {t('popup.delay')}:
+            </div>
+            <div className='flex gap-2'>
               <button
                 type='button'
-                className={`btn btn-sm ${selectedMode === 'active' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setSelectedMode('active')}
+                className={`btn btn-sm touch-manipulation focus-visible:ring-2 focus-visible:ring-delayo-orange/60 ${selectedMode === 'active' ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => handleModeChange('active')}
               >
                 {t('popup.tabs.active')}
               </button>
               <button
                 type='button'
-                className={`btn btn-sm ${selectedMode === 'highlighted' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setSelectedMode('highlighted')}
+                className={`btn btn-sm touch-manipulation focus-visible:ring-2 focus-visible:ring-delayo-orange/60 ${selectedMode === 'highlighted' ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => handleModeChange('highlighted')}
                 disabled={highlightedTabs.length <= 1}
               >
-                {t('popup.tabs.highlighted')} {highlightedTabs.length > 1 ? `(${highlightedTabs.length})` : ''}
+                {t('popup.tabs.highlighted')}{' '}
+                {highlightedTabs.length > 1
+                  ? `(${highlightedTabs.length})`
+                  : ''}
               </button>
               <button
                 type='button'
-                className={`btn btn-sm ${selectedMode === 'window' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setSelectedMode('window')}
+                className={`btn btn-sm touch-manipulation focus-visible:ring-2 focus-visible:ring-delayo-orange/60 ${selectedMode === 'window' ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => handleModeChange('window')}
               >
-                {t('popup.tabs.window')} {allWindowTabs.length > 0 ? `(${allWindowTabs.length})` : ''}
+                {t('popup.tabs.window')}{' '}
+                {allWindowTabs.length > 0 ? `(${allWindowTabs.length})` : ''}
               </button>
             </div>
           </div>
 
-          <div className='rounded-lg bg-base-100/70 p-4 shadow-sm transition-all duration-200 hover:bg-base-100'>
+          <div className='rounded-lg bg-base-100/70 px-4 py-3 shadow-sm'>
             {selectedMode === 'active' && activeTab && (
-              <div className='flex items-center'>
+              <div className='flex min-w-0 items-center'>
                 {activeTab.favIconUrl && (
                   <img
                     src={activeTab.favIconUrl}
-                    alt='Tab favicon'
+                    alt={t('common.faviconAlt')}
+                    width={20}
+                    height={20}
                     className='mr-3 h-5 w-5 rounded-sm'
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none';
                     }}
                   />
                 )}
-                <div className='truncate text-sm font-medium text-base-content/80'>
+                <div className='min-w-0 truncate text-sm font-medium text-base-content/80'>
                   {activeTab.title}
                 </div>
               </div>
             )}
-            
+
             {selectedMode === 'highlighted' && (
               <div className='text-sm font-medium text-base-content/80'>
-                {highlightedTabs.length} {highlightedTabs.length === 1 ? t('common.tabs.singular') : t('common.tabs')} {t('popup.selected')}
+                {highlightedTabs.length}{' '}
+                {highlightedTabs.length === 1
+                  ? t('common.tabs.singular')
+                  : t('common.tabs')}{' '}
+                {t('popup.selected')}
               </div>
             )}
-            
+
             {selectedMode === 'window' && (
               <div className='text-sm font-medium text-base-content/80'>
-                {allWindowTabs.length} {allWindowTabs.length === 1 ? t('common.tabs.singular') : t('common.tabs')} {t('popup.inWindow')}
+                {allWindowTabs.length}{' '}
+                {allWindowTabs.length === 1
+                  ? t('common.tabs.singular')
+                  : t('common.tabs')}{' '}
+                {t('popup.inWindow')}
               </div>
             )}
           </div>
+
+          <div className='flex items-center'>
+            <button
+              type='button'
+              className='btn btn-sm touch-manipulation border-none bg-delayo-orange font-semibold text-white hover:bg-[#e67300] focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+              onClick={() => void handleQuickTurbo()}
+              title={t('popup.quickTurboDesc')}
+            >
+              <FontAwesomeIcon
+                icon='bolt'
+                className='mr-1.5 h-3.5 w-3.5 text-white'
+                aria-hidden='true'
+              />
+              <span>{t('popup.quickTurbo')}</span>
+            </button>
+          </div>
         </div>
 
+        {/* Delay preset grid */}
         <div className='grid grid-cols-3 gap-2.5'>
-          {delayOptions.slice(0, 7).map((option) => (
-            <div key={option.id} className='card'>
-              <button
-                type='button'
-                className='group btn h-24 flex-col items-center justify-center rounded-xl border-none bg-base-100/70 p-3 shadow-sm transition-all duration-200 hover:bg-base-100'
-                onClick={() => handleDelay(option)}
-              >
-                <FontAwesomeIcon
-                  icon={
-                    option.id === 'later_today'
-                      ? 'mug-hot'
-                      : option.id === 'tonight'
-                        ? 'moon'
-                        : option.id === 'tomorrow'
-                          ? 'cloud-sun'
-                          : option.id === 'weekend'
-                            ? 'couch'
-                            : option.id === 'next_week'
-                              ? 'briefcase'
-                              : option.id === 'next_month'
-                                ? 'envelope'
-                                : 'clock'
-                  }
-                  className='mb-3 h-5 w-5 transform text-neutral-400 transition-all duration-300 ease-in-out group-hover:scale-110 group-hover:text-delayo-orange'
-                />
-                <span className='text-center text-xs font-medium text-base-content/80 group-hover:text-base-content'>
-                  {option.label}
-                </span>
-              </button>
-            </div>
+          {delayOptions.map((option) => (
+            <button
+              key={option.id}
+              type='button'
+              className='group btn h-24 touch-manipulation flex-col flex-nowrap items-center justify-center rounded-xl border-none bg-base-100/70 p-3 shadow-sm transition-colors duration-150 hover:bg-base-100 focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+              onClick={() => void handleDelay(option)}
+            >
+              <FontAwesomeIcon
+                icon={
+                  option.id === 'later_today'
+                    ? 'mug-hot'
+                    : option.id === 'tomorrow'
+                        ? 'cloud-sun'
+                        : option.id === 'weekend'
+                          ? 'couch'
+                          : option.id === 'next_week'
+                            ? 'briefcase'
+                          : option.id === 'one_week'
+                            ? 'calendar-week'
+                            : option.id === 'next_month'
+                              ? 'envelope'
+                              : 'clock'
+                }
+                className='mb-2 h-5 w-5 shrink-0 text-neutral-400 transition-colors duration-150 group-hover:text-delayo-orange'
+                aria-hidden='true'
+              />
+              <span className='min-w-0 max-w-full text-balance text-center text-xs font-medium leading-snug text-base-content/80 group-hover:text-base-content'>
+                {option.label}
+              </span>
+            </button>
           ))}
 
-          <div className='card'>
-            <Link
-              to='/custom-delay'
-              className='group btn h-24 flex-col items-center justify-center rounded-xl border-none bg-base-100/70 p-3 shadow-sm transition-all duration-200 hover:bg-base-100'
-              viewTransition={{ types: ['slide-left'] }}
-              onClick={() => {
-                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-                  chrome.storage.local.set({ selectedMode });
-                }
-              }}
-            >
-              <FontAwesomeIcon
-                icon='calendar-days'
-                className='mb-3 h-5 w-5 transform text-neutral-400 transition-all duration-300 ease-in-out group-hover:scale-110 group-hover:text-delayo-orange'
-              />
-              <span className='text-center text-xs font-medium text-base-content/80 group-hover:text-base-content'>
-                {t('popup.delayOptions.custom')}
-              </span>
-            </Link>
-          </div>
+          <Link
+            to='/custom-delay'
+            className='group btn h-24 touch-manipulation flex-col flex-nowrap items-center justify-center rounded-xl border-none bg-base-100/70 p-3 shadow-sm transition-colors duration-150 hover:bg-base-100 focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+            onClick={() => {
+              void persistSelectedMode();
+            }}
+          >
+            <FontAwesomeIcon
+              icon='calendar-days'
+              className='mb-2 h-5 w-5 shrink-0 text-neutral-400 transition-colors duration-150 group-hover:text-delayo-orange'
+              aria-hidden='true'
+            />
+            <span className='min-w-0 max-w-full text-balance text-center text-xs font-medium leading-snug text-base-content/80 group-hover:text-base-content'>
+              {t('popup.delayOptions.custom')}
+            </span>
+          </Link>
 
-          <div className='card'>
-            <Link
-              to='/recurring-delay'
-              className='group btn h-24 flex-col items-center justify-center rounded-xl border-none bg-base-100/70 p-3 shadow-sm transition-all duration-200 hover:bg-base-100'
-              viewTransition={{ types: ['slide-left'] }}
-              onClick={() => {
-                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-                  chrome.storage.local.set({ selectedMode });
-                }
-              }}
-            >
-              <FontAwesomeIcon
-                icon='repeat'
-                className='mb-3 h-5 w-5 transform text-neutral-400 transition-all duration-300 ease-in-out group-hover:scale-110 group-hover:text-delayo-orange'
-              />
-              <span className='text-center text-xs font-medium text-base-content/80 group-hover:text-base-content'>
-                {t('popup.delayOptions.recurring')}
-              </span>
-            </Link>
-          </div>
+          <Link
+            to='/recurring-delay'
+            className='group btn h-24 touch-manipulation flex-col flex-nowrap items-center justify-center rounded-xl border-none bg-base-100/70 p-3 shadow-sm transition-colors duration-150 hover:bg-base-100 focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+            onClick={() => {
+              void persistSelectedMode();
+            }}
+          >
+            <FontAwesomeIcon
+              icon='repeat'
+              className='mb-2 h-5 w-5 shrink-0 text-neutral-400 transition-colors duration-150 group-hover:text-delayo-orange'
+              aria-hidden='true'
+            />
+            <span className='min-w-0 max-w-full text-balance text-center text-xs font-medium leading-snug text-base-content/80 group-hover:text-base-content'>
+              {t('popup.delayOptions.recurring')}
+            </span>
+          </Link>
         </div>
 
-        <div className='mt-6 flex justify-center'>
+        <div className='mt-3 flex items-center justify-between border-t border-base-200 pt-2'>
           <Link
             to='/manage-tabs'
-            className='btn btn-sm btn-ghost text-sm font-medium text-base-content/70 hover:text-delayo-orange transition-all duration-200'
-            viewTransition={{ types: ['slide-left'] }}
+            className='btn btn-ghost btn-sm touch-manipulation text-sm font-medium text-base-content/70 transition-colors duration-200 hover:text-delayo-orange focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
           >
             <FontAwesomeIcon
               icon='list-ul'
               className='mr-2 h-4 w-4'
+              aria-hidden='true'
             />
             {t('popup.actions.manageTabs')}
           </Link>
+          <DonationButton isCompact={true} />
         </div>
       </div>
     </div>

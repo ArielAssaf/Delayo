@@ -1,143 +1,87 @@
+import React, { useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import useTabSelection from '@hooks/useTabSelection';
 import { Link } from '@tanstack/react-router';
-import React, { useEffect, useState } from 'react';
-import generateUniqueTabId from '@utils/generateUniqueTabId';
+import { scheduleTabs } from '@utils/delayedTabsRuntime';
 import { useTranslation } from 'react-i18next';
 
+import CustomCalendar from '../../../components/CustomCalendar';
+import TimePicker from '../../../components/TimePicker';
+import { trackTabDelayed } from '../../../services/analytics';
+
 function CustomDelayView(): React.ReactElement {
-  const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<chrome.tabs.Tab | null>(null);
-  const [highlightedTabs, setHighlightedTabs] = useState<chrome.tabs.Tab[]>([]);
-  const [allWindowTabs, setAllWindowTabs] = useState<chrome.tabs.Tab[]>([]);
-  const [selectedMode, setSelectedMode] = useState<'active' | 'highlighted' | 'window'>('active');
-  const [loading, setLoading] = useState(true);
-  const [customDate, setCustomDate] = useState<string>(
-    new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
-  );
+  const { i18n, t } = useTranslation();
+  const locale =
+    i18n.language ||
+    document.documentElement.lang ||
+    navigator.language ||
+    'pt-BR';
 
-  useEffect(() => {
-    const getTabs = async (): Promise<void> => {
-      try {
-        if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
-          const [tab] = await chrome.tabs.query({
-            active: true,
-            currentWindow: true,
-          });
-          setActiveTab(tab);
-          
-          const highlighted = await chrome.tabs.query({
-            highlighted: true,
-            currentWindow: true,
-          });
-          setHighlightedTabs(highlighted);
-          
-          const { selectedMode: mainViewMode } = await chrome.storage.local.get('selectedMode');
-          if (mainViewMode) {
-            setSelectedMode(mainViewMode);
-          } else if (highlighted.length > 1) {
-            setSelectedMode('highlighted');
-          } else {
-            setSelectedMode('active');
-          }
+  const {
+    activeTab,
+    allWindowTabs,
+    highlightedTabs,
+    loading,
+    persistSelectedMode,
+    selectedMode,
+    tabsToDelay,
+  } = useTabSelection();
 
-          const allTabs = await chrome.tabs.query({
-            currentWindow: true,
-          });
-          setAllWindowTabs(allTabs);
-        } else {
-          // Development mode
-          const mockTab = {
-            id: 123,
-            url: 'https://example.com',
-            title: 'Example Page (DEV MODE)',
-            favIconUrl: 'https://www.google.com/favicon.ico',
-          } as chrome.tabs.Tab;
-          
-          setActiveTab(mockTab);
-          setHighlightedTabs([mockTab]);
-          setAllWindowTabs([mockTab]);
-        }
-      } catch (error) {
-        console.error('Error getting tabs:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // State: selected Date object
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1); // default tomorrow
+    d.setHours(9, 0, 0, 0); // default 09:00
+    return d;
+  });
 
-    getTabs();
-  }, []);
+  const timeString = useMemo(() => {
+    const hours = String(selectedDate.getHours()).padStart(2, '0');
+    const minutes = String(selectedDate.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }, [selectedDate]);
 
-  const getTabsToDelay = (): chrome.tabs.Tab[] => {
-    switch (selectedMode) {
-      case 'active':
-        return activeTab ? [activeTab] : [];
-      case 'highlighted':
-        return highlightedTabs;
-      case 'window':
-        return allWindowTabs;
-      default:
-        return activeTab ? [activeTab] : [];
-    }
+  const handleTimeChange = (newTime: string) => {
+    const [h, m] = newTime.split(':').map((v) => parseInt(v, 10) || 0);
+    const updated = new Date(selectedDate);
+    updated.setHours(h, m, 0, 0);
+    setSelectedDate(updated);
   };
 
+  const handleDateChange = (newDate: Date) => {
+    setSelectedDate(newDate);
+  };
+
+  const setOffsetDays = (days: number) => {
+    const updated = new Date();
+    updated.setDate(updated.getDate() + days);
+    updated.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+    setSelectedDate(updated);
+  };
+
+  const formattedSummary = useMemo(() => {
+    return selectedDate.toLocaleDateString(locale, {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }, [selectedDate, locale]);
+
   const handleDelay = async (): Promise<void> => {
-    const tabsToDelay = getTabsToDelay();
-    if (tabsToDelay.length === 0) return;
-
-    const wakeTime = new Date(customDate).getTime();
-
-    const windowSessionId =
-      selectedMode === 'window' ? generateUniqueTabId() : undefined;
-
-    if (
-      typeof chrome !== 'undefined' &&
-      chrome.storage &&
-      chrome.storage.local
-    ) {
-      chrome.storage.local.get({ delayedTabs: [] }, async (data) => {
-        const { delayedTabs } = data;
-        const tabIds: number[] = [];
-
-        for (const tab of tabsToDelay) {
-          if (!tab.id) continue;
-
-          const newTabId = generateUniqueTabId();
-
-          const tabInfo = {
-            id: newTabId,
-            url: tab.url,
-            title: tab.title,
-            favicon: tab.favIconUrl,
-            createdAt: Date.now(),
-            wakeTime,
-            windowSessionId,
-            windowIndex: typeof tab.index === 'number' ? tab.index : undefined,
-          };
-
-          delayedTabs.push(tabInfo);
-
-          if (chrome.alarms) {
-            await chrome.alarms.create(`delayed-tab-${tabInfo.id}`, {
-              when: wakeTime,
-            });
-          }
-          
-          tabIds.push(tab.id);
-        }
-
-        await chrome.storage.local.set({ delayedTabs });
-
-        if (chrome.tabs && tabIds.length > 0) {
-          await chrome.tabs.remove(tabIds);
-        }
-
-        if (window.close) {
-          window.close();
-        }
-      });
-    } else {
-      console.log('Development mode - tabs would be delayed:', tabsToDelay);
+    if (tabsToDelay.length === 0) {
+      return;
     }
+
+    await persistSelectedMode();
+    void trackTabDelayed({
+      presetId: 'custom',
+      count: tabsToDelay.length,
+      mode: selectedMode,
+    });
+    await scheduleTabs(tabsToDelay, selectedDate.getTime(), undefined, selectedMode === 'window');
+    window.close();
   };
 
   if (loading) {
@@ -148,83 +92,156 @@ function CustomDelayView(): React.ReactElement {
     );
   }
 
-  return (
-    <div className='card w-80 rounded-none bg-base-300 shadow-md'>
-      <div className='card-body p-6'>
-        <div className='mb-5 flex items-center'>
-          <Link
-            to='/'
-            className='btn btn-circle btn-ghost btn-sm mr-3 transition-all duration-200 hover:bg-base-100'
-            aria-label={t('common.back')}
-            viewTransition={{ types: ['slide-right'] }}
-          >
-            <FontAwesomeIcon icon='arrow-left' />
-          </Link>
-          <h2 className='card-title font-bold text-delayo-orange'>
-            {t('customDelay.title')}
-          </h2>
-        </div>
+  const isToday = new Date().toDateString() === selectedDate.toDateString();
+  const isTomorrow =
+    new Date(Date.now() + 86400000).toDateString() ===
+    selectedDate.toDateString();
 
-        <div className='mb-5'>
-          <div className='text-sm font-medium text-base-content/80 mb-2'>{t('popup.delay')}:</div>
-          <div className='rounded-lg bg-base-100/70 p-4 shadow-sm transition-all duration-200 hover:bg-base-100'>
-            {selectedMode === 'active' && activeTab && (
-              <div className='flex items-center'>
-                {activeTab.favIconUrl && (
-                  <img
-                    src={activeTab.favIconUrl}
-                    alt='Tab favicon'
-                    className='mr-3 h-5 w-5 rounded-sm'
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                )}
-                <div className='overflow-hidden'>
-                  <div className='truncate text-sm font-medium text-base-content/80'>
-                    {activeTab.title}
-                  </div>
-                  <div className='truncate text-xs text-base-content/60'>
-                    {activeTab.url}
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {selectedMode === 'highlighted' && (
-              <div className='text-sm font-medium text-base-content/80'>
-                {highlightedTabs.length} {highlightedTabs.length === 1 ? t('common.tabs.singular') : t('common.tabs')} {t('popup.selected')}
-              </div>
-            )}
-            
-            {selectedMode === 'window' && (
-              <div className='text-sm font-medium text-base-content/80'>
-                {allWindowTabs.length} {allWindowTabs.length === 1 ? t('common.tabs.singular') : t('common.tabs')} {t('popup.inWindow')}
-              </div>
-            )}
+  return (
+    <div className='card w-[40rem] max-w-full rounded-none bg-base-300 shadow-md'>
+      <div className='card-body p-6'>
+        {/* Header */}
+        <div className='mb-5 flex items-center justify-between'>
+          <div className='flex items-center'>
+            <Link
+              to='/'
+              className='btn btn-circle btn-ghost btn-sm mr-2.5 touch-manipulation transition-colors duration-200 hover:bg-base-100 focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+              aria-label={t('common.back')}
+            >
+              <FontAwesomeIcon icon='arrow-left' aria-hidden='true' />
+            </Link>
+            <h2 className='card-title text-base font-bold text-delayo-orange sm:text-lg'>
+              {t('customDelay.title')}
+            </h2>
+          </div>
+
+          <div className='text-xs font-semibold text-base-content/70'>
+            {tabsToDelay.length}{' '}
+            {tabsToDelay.length === 1
+              ? t('common.tabs.singular')
+              : t('common.tabs')}
           </div>
         </div>
 
-        <div className='form-control'>
-          <label className='label'>
-            <span className='label-text font-medium'>
-              {t('customDelay.selectDateTime')}
-            </span>
-          </label>
-          <input
-            type='datetime-local'
-            className='input input-bordered w-full border-none bg-base-100/50 shadow-sm transition-all duration-200 focus:bg-base-100/80'
-            value={customDate}
-            onChange={(e) => setCustomDate(e.target.value)}
-            min={new Date().toISOString().slice(0, 16)}
-          />
+        {/* Tab Summary Preview */}
+        <div className='mb-3 rounded-lg border border-base-200/60 bg-base-100/70 px-3 py-2'>
+          {selectedMode === 'active' && activeTab && (
+            <div className='flex items-center'>
+              {activeTab.favIconUrl && (
+                <img
+                  src={activeTab.favIconUrl}
+                  alt={t('common.faviconAlt')}
+                  width={16}
+                  height={16}
+                  className='mr-2.5 h-4 w-4 rounded-sm'
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
+              <div className='truncate text-xs font-medium text-base-content/80 sm:text-sm'>
+                {activeTab.title}
+              </div>
+            </div>
+          )}
+
+          {selectedMode === 'highlighted' && (
+            <div className='text-xs font-medium text-base-content/80 sm:text-sm'>
+              {highlightedTabs.length}{' '}
+              {highlightedTabs.length === 1
+                ? t('common.tabs.singular')
+                : t('common.tabs')}{' '}
+              {t('popup.selected')}
+            </div>
+          )}
+
+          {selectedMode === 'window' && (
+            <div className='text-xs font-medium text-base-content/80 sm:text-sm'>
+              {allWindowTabs.length}{' '}
+              {allWindowTabs.length === 1
+                ? t('common.tabs.singular')
+                : t('common.tabs')}{' '}
+              {t('popup.inWindow')}
+            </div>
+          )}
         </div>
 
-        <div className='card-actions mt-6 justify-end'>
+        {/* Main 2-Column Content */}
+        <div className='grid grid-cols-2 items-stretch gap-3'>
+          {/* Left Column: Quick Chips + Calendar */}
+          <div className='flex h-full flex-col gap-2 rounded-lg border border-base-200/60 bg-base-100/70 p-3'>
+            <span className='text-xs font-bold text-base-content/80'>
+              {t('customDelay.selectDateTime')}
+            </span>
+
+            {/* Quick Date Chips */}
+            <div className='grid grid-cols-2 gap-1'>
+              <button
+                type='button'
+                className={`btn btn-xs h-7 min-h-0 touch-manipulation rounded-full px-2 text-xs focus-visible:ring-2 focus-visible:ring-delayo-orange/60 ${isToday ? 'btn-primary' : 'btn-ghost border border-base-300 bg-transparent hover:bg-base-200'}`}
+                onClick={() => setOffsetDays(0)}
+              >
+                {t('settings.laterToday')}
+              </button>
+              <button
+                type='button'
+                className={`btn btn-xs h-7 min-h-0 touch-manipulation rounded-full px-2 text-xs focus-visible:ring-2 focus-visible:ring-delayo-orange/60 ${isTomorrow ? 'btn-primary' : 'btn-ghost border border-base-300 bg-transparent hover:bg-base-200'}`}
+                onClick={() => setOffsetDays(1)}
+              >
+                {t('settings.tomorrow')}
+              </button>
+              <button
+                type='button'
+                className='btn btn-xs h-7 min-h-0 touch-manipulation rounded-full border border-base-300 bg-transparent px-2 text-xs hover:bg-base-200 focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+                onClick={() => setOffsetDays(2)}
+              >
+                +2d
+              </button>
+              <button
+                type='button'
+                className='btn btn-xs h-7 min-h-0 touch-manipulation rounded-full border border-base-300 bg-transparent px-2 text-xs hover:bg-base-200 focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+                onClick={() => setOffsetDays(7)}
+              >
+                +7d
+              </button>
+            </div>
+
+            {/* Integrated Custom Calendar */}
+            <CustomCalendar
+              selectedDate={selectedDate}
+              onSelectDate={handleDateChange}
+              className='border-0 bg-transparent p-0'
+            />
+          </div>
+
+          <div className='flex h-full flex-col rounded-lg border border-base-200/60 bg-base-100/70 p-3'>
+            <span className='mb-2 block text-xs font-bold text-base-content/80'>
+              {t('recurringDelay.selectTime')}
+            </span>
+
+            <TimePicker
+              value={timeString}
+              onChange={handleTimeChange}
+              isPopup={true}
+            />
+          </div>
+        </div>
+
+        <div className='mt-3 flex items-center gap-3 rounded-lg border border-base-200/60 bg-base-100/50 p-3'>
+          <div className='min-w-0 flex-1 text-xs'>
+            <span className='font-medium text-base-content/70'>
+              {t('popup.delay')}:{' '}
+            </span>
+            <span className='font-bold capitalize text-delayo-orange'>
+              {formattedSummary}
+            </span>
+          </div>
+
           <button
-            className='btn btn-primary border-none shadow-sm transition-all duration-200 hover:shadow'
-            onClick={handleDelay}
-            disabled={!activeTab || !customDate}
+            type='button'
+            className='btn btn-primary btn-sm shrink-0 font-semibold focus-visible:ring-2 focus-visible:ring-delayo-orange/60'
+            onClick={() => void handleDelay()}
+            disabled={tabsToDelay.length === 0}
           >
             {t('customDelay.delayTab')}
           </button>

@@ -1,85 +1,50 @@
-import React, { useEffect, useState } from 'react';
+import useDelaySettings from '@hooks/useDelaySettings';
+import React, { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import TimePicker from '../../components/TimePicker';
+import { isAnalyticsEnabled, setAnalyticsEnabled } from '../../services/analytics';
 
+const getInputClasses = (isPopup: boolean): string =>
+  `input input-bordered ${isPopup ? 'h-12 rounded-lg bg-base-100/70 p-4 shadow-sm transition-colors duration-200 motion-reduce:transition-none hover:bg-base-100' : ''}`;
 
-const getInputClasses = (isPopup: boolean): string => {
-  return `input input-bordered ${isPopup ? 'rounded-lg bg-base-100/70 p-4 shadow-sm transition-all duration-200 hover:bg-base-100 h-12' : ''}`;
-};
-const getRadioClasses = (isPopup: boolean): string => {
-  return `radio radio-primary ${isPopup ? 'transition-all duration-200' : ''}`;
-};
-const getSelectClasses = (isPopup: boolean): string => {
-  return `select select-bordered ${isPopup ? 'rounded-lg bg-base-100/70 shadow-sm transition-all duration-200 hover:bg-base-100' : ''}`;
-};
+const getRadioClasses = (isPopup: boolean): string =>
+  `radio radio-primary ${isPopup ? 'transition-colors duration-200 motion-reduce:transition-none' : ''}`;
 
-interface DelaySettings {
-  laterToday: number; // hours
-  tomorrowTime: string; // format HH:MM
-  weekendDay: 'saturday' | 'sunday';
-  weekendTime: string; // format HH:MM
-  nextMonthSameDay: boolean; // if true, same day of month; if false, same day of week
-}
-
-// Default values for settings
-const defaultSettings: DelaySettings = {
-  laterToday: 3,
-  tomorrowTime: '09:00',
-  weekendDay: 'saturday',
-  weekendTime: '09:00',
-  nextMonthSameDay: true,
-};
+const getSelectClasses = (isPopup: boolean): string =>
+  `select select-bordered ${isPopup ? 'rounded-lg bg-base-100/70 shadow-sm transition-colors duration-200 motion-reduce:transition-none hover:bg-base-100' : ''}`;
 
 interface DelaySettingsComponentProps {
   isPopup?: boolean;
 }
 
-function DelaySettingsComponent({ isPopup = false }: DelaySettingsComponentProps): React.ReactElement {
-  const [settings, setSettings] = useState<DelaySettings>(defaultSettings);
-  const [loading, setLoading] = useState(true);
-  const [saved, setSaved] = useState(false);
+function DelaySettingsComponent({
+  isPopup = false,
+}: DelaySettingsComponentProps): React.ReactElement {
   const { t } = useTranslation();
+  const analyticsToggleId = useId();
+  const { loading, resetSettings, saveSettings, settings, updateSetting } =
+    useDelaySettings();
+  const [saved, setSaved] = useState(false);
+  const [analyticsActive, setAnalyticsActive] = useState(true);
 
   useEffect(() => {
-    const loadSettings = async (): Promise<void> => {
-      try {
-        setLoading(true);
-        const { delaySettings = defaultSettings } =
-          await chrome.storage.local.get('delaySettings');
-        setSettings(delaySettings);
-        } catch (error) {
-          // Handle error while loading settings
-        } finally {
-        setLoading(false);
-      }
-    };
-
-    loadSettings();
+    void isAnalyticsEnabled().then(setAnalyticsActive);
   }, []);
 
-  // Save settings to local storage
-  const saveSettings = async (): Promise<void> => {
-    try {
-      await chrome.storage.local.set({ delaySettings: settings });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (error) {
-      // Handle error while saving settings
+  useEffect(() => {
+    if (!saved) {
+      return undefined;
     }
-  };
 
-  const resetSettings = (): void => {
-    setSettings(defaultSettings);
-  };
+    const timeout = window.setTimeout(() => setSaved(false), 2000);
 
-  // Update a specific delay setting value
-  const updateSetting = <K extends keyof DelaySettings>(
-    key: K,
-    value: DelaySettings[K]
-  ): void => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    return () => window.clearTimeout(timeout);
+  }, [saved]);
+
+  const handleSave = async (): Promise<void> => {
+    await saveSettings();
+    await setAnalyticsEnabled(analyticsActive);
+    setSaved(true);
   };
 
   if (loading) {
@@ -91,15 +56,18 @@ function DelaySettingsComponent({ isPopup = false }: DelaySettingsComponentProps
   }
 
   return (
-    <div className={`card w-full max-w-4xl mx-auto bg-base-300 ${!isPopup ? 'border border-base-300 shadow-sm hover:shadow-md transition-shadow duration-300' : ''}`}>
+    <div
+      className={`card mx-auto w-full max-w-4xl bg-base-300 ${!isPopup ? 'border border-base-300 shadow-sm transition-shadow duration-300 hover:shadow-md' : ''}`}
+    >
       <div className='card-body p-6 sm:p-8'>
         <h2 className='card-title mb-4'>{t('settings.defaultDelayOptions')}</h2>
 
         <div className='space-y-4'>
-          {/* Later Today */}
           <div className='form-control'>
             <label className='label'>
-              <span className='label-text font-medium'>{t('settings.laterToday')}</span>
+              <span className='label-text font-medium'>
+                {t('settings.laterToday')}
+              </span>
             </label>
             <div className='flex items-center'>
               <input
@@ -108,65 +76,61 @@ function DelaySettingsComponent({ isPopup = false }: DelaySettingsComponentProps
                 min='1'
                 max='12'
                 value={settings.laterToday}
-                onChange={(e) =>
-                  updateSetting('laterToday', parseInt(e.target.value, 10) || 1)
+                onChange={(event) =>
+                  updateSetting(
+                    'laterToday',
+                    parseInt(event.target.value, 10) || 1
+                  )
                 }
               />
               <span className='ml-2'>{t('settings.hours')}</span>
             </div>
           </div>
 
-          {/* Tomorrow */}
           <div className='form-control'>
             <label className='label'>
-              <span className='label-text font-medium'>{t('settings.tomorrow')}</span>
+              <span className='label-text font-medium'>
+                {t('settings.tomorrow')}
+              </span>
             </label>
-            <div className='relative'>
-              <input
-                type='time'
-                className={`${getInputClasses(isPopup)} w-full max-w-72`}
-                value={settings.tomorrowTime}
-                onChange={(e) => updateSetting('tomorrowTime', e.target.value)}
-                style={{ appearance: 'none' }}
-              />
-            </div>
+            <TimePicker
+              value={settings.tomorrowTime}
+              onChange={(newTime) => updateSetting('tomorrowTime', newTime)}
+              isPopup={isPopup}
+            />
           </div>
 
-          {/* This Weekend */}
           <div className='form-control'>
             <label className='label'>
               <span className='label-text font-medium'>{t('settings.weekend')}</span>
             </label>
-            <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+            <div className='flex flex-col gap-2 sm:flex-row sm:items-end'>
               <select
                 className={`${getSelectClasses(isPopup)} w-full max-w-72`}
                 value={settings.weekendDay}
-                onChange={(e) =>
+                onChange={(event) =>
                   updateSetting(
                     'weekendDay',
-                    e.target.value as 'saturday' | 'sunday'
+                    event.target.value as 'saturday' | 'sunday'
                   )
                 }
               >
                 <option value='saturday'>{t('popup.weekdays.saturday')}</option>
                 <option value='sunday'>{t('popup.weekdays.sunday')}</option>
               </select>
-              <div className='relative'>
-                <input
-                  type='time'
-                  className={`${getInputClasses(isPopup)} w-full max-w-72`}
-                  value={settings.weekendTime}
-                  onChange={(e) => updateSetting('weekendTime', e.target.value)}
-                  style={{ appearance: 'none' }}
-                />
-              </div>
+              <TimePicker
+                value={settings.weekendTime}
+                onChange={(newTime) => updateSetting('weekendTime', newTime)}
+                isPopup={isPopup}
+              />
             </div>
           </div>
 
-          {/* Next Month */}
           <div className='form-control'>
             <label className='label'>
-              <span className='label-text font-medium'>{t('settings.nextMonth')}</span>
+              <span className='label-text font-medium'>
+                {t('settings.nextMonth')}
+              </span>
             </label>
             <div className='flex items-center'>
               <div className='form-control'>
@@ -178,7 +142,9 @@ function DelaySettingsComponent({ isPopup = false }: DelaySettingsComponentProps
                     checked={settings.nextMonthSameDay}
                     onChange={() => updateSetting('nextMonthSameDay', true)}
                   />
-                  <span className='label-text ml-2'>{t('settings.sameDayOfMonth')}</span>
+                  <span className='label-text ml-2'>
+                    {t('settings.sameDayOfMonth')}
+                  </span>
                 </label>
               </div>
               <div className='form-control ml-4'>
@@ -190,13 +156,34 @@ function DelaySettingsComponent({ isPopup = false }: DelaySettingsComponentProps
                     checked={!settings.nextMonthSameDay}
                     onChange={() => updateSetting('nextMonthSameDay', false)}
                   />
-                  <span className='label-text ml-2'>{t('settings.sameDayOfWeek')}</span>
+                  <span className='label-text ml-2'>
+                    {t('settings.sameDayOfWeek')}
+                  </span>
                 </label>
               </div>
             </div>
-            {}
           </div>
 
+          <div className='form-control pt-2 border-t border-base-200'>
+            <label htmlFor={analyticsToggleId} className='label cursor-pointer justify-between'>
+              <div className='flex flex-col pr-4'>
+                <span className='label-text font-medium'>
+                  {t('settings.analytics.title')}
+                </span>
+                <span className='text-xs text-base-content/60'>
+                  {t('settings.analytics.description')}
+                </span>
+              </div>
+              <input
+                id={analyticsToggleId}
+                type='checkbox'
+                className='toggle toggle-primary'
+                checked={analyticsActive}
+                onChange={(e) => setAnalyticsActive(e.target.checked)}
+                aria-label={t('settings.analytics.title')}
+              />
+            </label>
+          </div>
         </div>
 
         <div className='card-actions mt-6 justify-end'>
@@ -207,18 +194,18 @@ function DelaySettingsComponent({ isPopup = false }: DelaySettingsComponentProps
           >
             {t('settings.reset')}
           </button>
-          <button
-            type='button'
-            className='btn btn-primary'
-            onClick={saveSettings}
-          >
+          <button type='button' className='btn btn-primary' onClick={handleSave}>
             {t('common.save')}
           </button>
         </div>
 
         {saved && (
-          <div className='mt-4 text-center text-success'>
-            {t('settings.saved', 'Configurações salvas com sucesso!')}
+          <div
+            className='mt-4 text-center text-success'
+            role='status'
+            aria-live='polite'
+          >
+            {t('settings.saved')}
           </div>
         )}
       </div>
